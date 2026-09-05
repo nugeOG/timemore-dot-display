@@ -8,6 +8,11 @@ For the technical background, protocol details, and the list of things
 that still need verifying on real hardware, see [HANDOFF.md](HANDOFF.md).
 This guide is just "how do I actually get this onto my device."
 
+This project's BLE protocol handling is ported from someone else's
+reverse-engineering work, not derived independently — see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for credit and license
+details.
+
 ## Before you start, you'll need
 
 - **Home Assistant OS or Home Assistant Supervised.** Add-ons (including

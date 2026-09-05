@@ -236,6 +236,9 @@ ESPHome config):
 - `HANDOFF.md` — this file
 - `README.md` — step-by-step build/install instructions via the Home
   Assistant ESPHome add-on, written for a first-time/inexperienced user
+- `THIRD_PARTY_NOTICES.md` — credit and license text for the projects this
+  one builds on (most importantly, the BLE protocol was ported from
+  someone else's reverse-engineering work, not derived independently here)
 - `timemore-dot-display.yaml` — the top-level ESPHome device config: wifi,
   `api:`/`mqtt:` network fan-out, display/touch driver (placeholder pins,
   see open item #1), the `timemore_dot` component, and the sensor/
