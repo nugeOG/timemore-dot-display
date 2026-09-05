@@ -202,10 +202,17 @@ ESPHome config):
    confirmed match to the actual unit. Confirm against the board's
    silkscreen/schematic (or just attempt a build and see what doesn't
    initialize) before trusting any pin number in that file.
-2. **Icon font** — the LVGL config uses placeholder codepoints
-   (`\U0000E000` etc.) for all icons (wifi, bluetooth, battery, tare, play,
-   pause, refresh, coffee, cup). Need to pick and bundle a real icon font
-   subset, or switch to PNG image widgets.
+2. ~~Icon font~~ **Resolved**: fonts are now pulled at build time via
+   `gfonts://` (Inter for text, Google's Material Symbols Outlined for
+   icons — see `scale-display-lvgl.yaml`'s `font:` block) rather than
+   bundled TTF files, and the glyph codepoints are real ones looked up from
+   `google/material-design-icons`' codepoints file, not placeholders. Not
+   yet verified by actually rendering them, though — the semantic picks
+   (`exposure_zero` for tare, `coffee`/`local_cafe` for pour-over/espresso
+   mode) are reasonable guesses at which glyph looks right, not confirmed
+   against the real rendered icon. **This needs internet access at build
+   time** to fetch fonts from Google's CDN — fine for the Home Assistant
+   ESPHome add-on, but worth knowing if you ever build offline.
 3. **`lvgl.arc.update` action name** — used in the config to update the
    reset-hold progress ring. Matches the general `lvgl.<widget>.update`
    pattern seen in other ESPHome LVGL actions, but not fully confirmed for
@@ -224,14 +231,6 @@ ESPHome config):
    once it's flashed and paste the real values in.
 6. Repo created: [github.com/nugeOG/timemore-dot-display](https://github.com/nugeOG/timemore-dot-display)
    (private).
-7. **Font files are missing — this will fail to build as-is.**
-   `scale-display-lvgl.yaml`'s `font:` block references
-   `fonts/Inter-Medium.ttf`, `fonts/Inter-Regular.ttf`, and
-   `fonts/icon-subset.ttf`, but no `fonts/` directory exists in this repo —
-   these are binary font assets that weren't fetched. Inter is free (SIL
-   OFL) — download it (e.g. from Google Fonts) and drop the Medium/Regular
-   weights in under `fonts/`. The icon font subset still needs to be
-   assembled per open item #2 above before either will compile.
 
 ## Files included in this handoff
 

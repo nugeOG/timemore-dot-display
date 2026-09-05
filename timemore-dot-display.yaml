@@ -3,7 +3,7 @@
 # ============================================================================
 #
 # Built for the Home Assistant ESPHome add-on. Drop this whole repo
-# (this file, scale-display-lvgl.yaml, components/, fonts/) into the
+# (this file, scale-display-lvgl.yaml, components/) into the
 # add-on's config folder and it should show up as a device to install.
 # Needs secrets.yaml alongside it — copy secrets.yaml.example and fill in
 # real values (the ESPHome add-on keeps one shared secrets.yaml for all your
@@ -204,6 +204,7 @@ binary_sensor:
         then:
           - lvgl.label.update:
               id: lbl_bt_icon
+              text: !lambda 'return x ? "\U0000E1A8" : "\U0000E1A9";'
               text_color: !lambda 'return x ? lv_color_hex(0x5DCAA5) : lv_color_hex(0x7A7A76);'
 
 button:

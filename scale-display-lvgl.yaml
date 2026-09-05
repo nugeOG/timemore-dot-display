@@ -20,15 +20,14 @@
 # on_value/on_state triggers wiring them into the labels below actually
 # live, since they belong on the sensor/binary_sensor entries themselves.
 #
-# Two things flagged as PLACEHOLDERS you must fill in before this compiles:
+# Fonts are pulled at build time via ESPHome's `gfonts://` source (Inter
+# and Google's Material Symbols Outlined icon font) — nothing to bundle in
+# this repo, no `fonts/` directory needed. Requires internet access at
+# build time (fine for the Home Assistant ESPHome add-on).
 #
-#   1. Icon glyphs (\U0000XXXX codepoints below). LVGL does not ship Tabler
-#      icons. You need to bundle an icon font (a subset TTF containing just
-#      the glyphs you use keeps flash usage small) and swap in its real
-#      codepoints, or replace the icon labels with small PNGs via an
-#      `image:` + `lvgl.image` widget instead of a font glyph approach.
+# One thing still flagged as a PLACEHOLDER:
 #
-#   2. `lvgl.arc.update` — this is the ESPHome LVGL action name for updating
+#   1. `lvgl.arc.update` — this is the ESPHome LVGL action name for updating
 #      an arc widget's value at the time of writing. LVGL/ESPHome's API
 #      shifts between versions (there was a real breaking change between
 #      LVGL 8 and 9 affecting arc/meter indicators) — verify this action
@@ -46,32 +45,49 @@
 # ============================================================================
 
 font:
-  - file: "fonts/Inter-Medium.ttf"
+  - file:
+      type: gfonts
+      family: Inter
+      weight: 500
     id: font_time
     size: 18
-  - file: "fonts/Inter-Medium.ttf"
+  - file:
+      type: gfonts
+      family: Inter
+      weight: 500
     id: font_weight
     size: 60
-  - file: "fonts/Inter-Regular.ttf"
+  - file:
+      type: gfonts
+      family: Inter
+      weight: 400
     id: font_small
     size: 11
-  - file: "fonts/Inter-Medium.ttf"
+  - file:
+      type: gfonts
+      family: Inter
+      weight: 500
     id: font_timer
     size: 32
-  - file: "fonts/icon-subset.ttf"     # PLACEHOLDER — your bundled icon font
+  # Google's Material Symbols Outlined icon font, codepoints looked up from
+  # google/material-design-icons' *.codepoints file for the variable-font
+  # family (not verified by rendering — double check the glyph shown for
+  # each of these actually looks right once you can see the real display).
+  - file: "gfonts://Material+Symbols+Outlined"
     id: font_icons
     size: 20
     glyphs:
-      - "\U0000E000"   # wifi
-      - "\U0000E001"   # bluetooth connected
-      - "\U0000E002"   # battery
-      - "\U0000E003"   # droplet (flow rate)
-      - "\U0000E004"   # tare (arrows)
-      - "\U0000E005"   # play
-      - "\U0000E006"   # pause
-      - "\U0000E007"   # refresh (reset)
-      - "\U0000E008"   # coffee (pour-over mode)
-      - "\U0000E009"   # cup (espresso mode)
+      - "\U0000E63E"   # wifi
+      - "\U0000E1A8"   # bluetooth_connected
+      - "\U0000E1A9"   # bluetooth_disabled
+      - "\U0000E1A5"   # battery_full
+      - "\U0000E798"   # water_drop (flow rate)
+      - "\U0000E3CF"   # exposure_zero (tare)
+      - "\U0000E037"   # play_arrow
+      - "\U0000E034"   # pause
+      - "\U0000E5D5"   # refresh (reset)
+      - "\U0000EFEF"   # coffee (pour-over mode)
+      - "\U0000EB44"   # local_cafe (espresso mode)
 
 globals:
   - id: timer_seconds
@@ -160,7 +176,7 @@ script:
       - lambda: 'id(timer_running) = !id(timer_running);'
       - lvgl.label.update:
           id: lbl_playpause_icon
-          text: !lambda 'return id(timer_running) ? "\U0000E006" : "\U0000E005";'
+          text: !lambda 'return id(timer_running) ? "\U0000E034" : "\U0000E037";'
       - lvgl.label.update:
           id: lbl_playpause_text
           text: !lambda 'return id(timer_running) ? "Pause" : "Start";'
@@ -177,7 +193,7 @@ script:
           text: "00:00"
       - lvgl.label.update:
           id: lbl_playpause_icon
-          text: "\U0000E005"
+          text: "\U0000E037"
       - lvgl.label.update:
           id: lbl_playpause_text
           text: "Start"
@@ -193,7 +209,7 @@ script:
           text: !lambda 'return id(brew_mode_espresso) ? "Espresso mode" : "Pour-over mode";'
       - lvgl.label.update:
           id: lbl_mode_icon
-          text: !lambda 'return id(brew_mode_espresso) ? "\U0000E009" : "\U0000E008";'
+          text: !lambda 'return id(brew_mode_espresso) ? "\U0000EB44" : "\U0000EFEF";'
 
 # ----------------------------------------------------------------------------
 # Screen layout — target resolution 240x320 portrait
@@ -230,14 +246,17 @@ lvgl:
             y: 10
             text_font: font_icons
             text_color: 0x5DCAA5
-            text: "\U0000E000"
+            text: "\U0000E63E"
         - label:
+            # Starts on the "disconnected" glyph/dim color -- the BLE link
+            # isn't up yet at boot. Swapped to bluetooth_connected/bright
+            # by ble_connected's on_state trigger in timemore-dot-display.yaml.
             id: lbl_bt_icon
             x: 176
             y: 10
             text_font: font_icons
-            text_color: 0x5DCAA5
-            text: "\U0000E001"
+            text_color: 0x7A7A76
+            text: "\U0000E1A9"
         - label:
             id: lbl_battery_pct
             x: 198
@@ -251,7 +270,7 @@ lvgl:
             y: 10
             text_font: font_icons
             text_color: 0xC9C9C4
-            text: "\U0000E002"
+            text: "\U0000E1A5"
 
         # ---- weight ----
         - label:
@@ -268,7 +287,7 @@ lvgl:
             x: -28
             text_font: font_icons
             text_color: 0x7A7A76
-            text: "\U0000E003"
+            text: "\U0000E798"
         - label:
             id: lbl_flow
             align: TOP_MID
@@ -321,7 +340,7 @@ lvgl:
                   align: CENTER
                   text_font: font_icons
                   text_color: 0xF2F2EF
-                  text: "\U0000E004"
+                  text: "\U0000E3CF"
             on_click:
               - script.execute: do_tare
 
@@ -339,7 +358,7 @@ lvgl:
                   align: CENTER
                   text_font: font_icons
                   text_color: 0x04342C
-                  text: "\U0000E005"
+                  text: "\U0000E037"
             on_click:
               - script.execute: toggle_timer
 
@@ -375,7 +394,7 @@ lvgl:
                   align: CENTER
                   text_font: font_icons
                   text_color: 0xF2F2EF
-                  text: "\U0000E007"
+                  text: "\U0000E5D5"
             on_press:
               - lambda: |-
                   id(reset_held) = true;
@@ -402,7 +421,7 @@ lvgl:
                   align: CENTER
                   text_font: font_icons
                   text_color: 0xF2F2EF
-                  text: "\U0000E008"
+                  text: "\U0000EFEF"
             on_click:
               - script.execute: toggle_mode
 
