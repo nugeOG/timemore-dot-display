@@ -9,6 +9,12 @@ fresh session) without re-deriving anything below. Everything here came out
 of a planning conversation — none of it has been built or tested on real
 hardware yet.
 
+Repo: [github.com/nugeOG/timemore-dot-display](https://github.com/nugeOG/timemore-dot-display)
+(private). Built to run via the **Home Assistant ESPHome add-on** — copy
+this whole repo into the add-on's config folder (alongside your existing
+`secrets.yaml`, or copy `secrets.yaml.example` to start one) and it should
+show up as an installable device.
+
 ## Hardware
 
 - Scale: TIMEMORE Black Mirror Dot (screenless, BLE-only, phone app normally
@@ -73,30 +79,47 @@ if anything below seems to not match your actual scale.
   OTA, display driver, and LVGL as normal — only the scale connection is
   hand-rolled.
 
-## Component not yet written
+## `timemore_dot` component — written, not yet built or tested
 
-The actual `timemore_dot` external component (`__init__.py`, `sensor.py`,
-`.h`, `.cpp`) implementing the above has **not been written yet** — this
-was the planned next step before the conversation moved to the LVGL screen
-and repo setup. Suggested structure:
+The custom ESPHome external component described above now exists at
+`components/timemore_dot/`:
 
 ```
 components/timemore_dot/
-├── __init__.py       # ESPHome component registration
+├── __init__.py       # ESPHome component registration, pins NimBLE-Arduino 1.4.1
 ├── sensor.py          # exposes weight + battery_level as sensor: platform
+├── binary_sensor.py   # exposes connected as binary_sensor: platform
+├── button.py           # exposes tare as button: platform (TareButton)
 ├── timemore_dot.h
 └── timemore_dot.cpp   # ported connect/handshake/decode logic from dot.cpp
 ```
 
-Build/test order (test the riskiest part first):
-1. Bare component, log-only — connect, force secure pairing, log decoded
-   weight/battery frames. Confirms bonding actually works on this board's
-   NimBLE stack before anything else is built.
-2. Wire into ESPHome `sensor:` entities (weight, battery) — also makes them
-   visible in Home Assistant if useful for debugging.
-3. Add tare as a `button:` calling into the component.
-4. Reconnection handling — mirror the `markedForReconnection` retry pattern
-   from the reference source.
+**Caveat that matters more than the others in this doc**: this code has
+never been compiled or run. It's a direct port of the connect → bond →
+subscribe → decode flow from the reference driver, using what I believe is
+the NimBLE-Arduino ~1.4.x API (`setScanCallbacks`, `secureConnection()`,
+the `subscribe()` lambda signature, `writeValue()`'s bool return). NimBLE-
+Arduino's API has shifted across major versions — if the build fails on
+these specific calls, that's the first thing to check, not a sign the
+overall approach (connect/bond/decode logic) is wrong.
+
+Reconnection uses the same `marked_for_reconnect_` pattern named in the
+original build/test-order note below, polled from `loop()` on a 5s backoff
+rather than acted on inline from a BLE callback.
+
+The code for all of the following now exists, but none of it has been
+exercised on hardware — when you actually build, verify in this order
+(test the riskiest part first) rather than assuming a clean build means
+it all works:
+1. Bonding — does `secureConnection()` actually succeed on this board's
+   NimBLE stack at all? Everything downstream depends on this. Watch the
+   logs (`logger:` is enabled) for "Bonding/secure connection ... failed".
+2. Frame decode — do the weight/battery entities in Home Assistant show
+   sane, updating values once bonded?
+3. Tare — does pressing the on-screen tare button (or the HA `tare_button`
+   entity) actually zero the scale?
+4. Reconnection — pull the scale out of range or power-cycle it; does the
+   scale entity reconnect on its own within a few reconnect-backoff cycles?
 
 ## Auto-timer logic (not scale-dependent — computed entirely on-device)
 
@@ -121,15 +144,23 @@ stream:
 
 ## Multi-device / relay considerations
 
-- BLE peripherals (this class of device very much included) typically only
-  accept one central connection at a time — untested for the Dot
-  specifically, but assume it until proven otherwise. Test by connecting
-  the custom firmware and the official Timemore app simultaneously.
-- If single-connection is confirmed: treat the ESP32 as the sole BLE
-  client, and fan data out over the network (ESPHome API / Home Assistant,
-  or MQTT) for any other device that wants to see it, rather than trying to
-  share the BLE connection itself.
-- A true BLE relay (ESP32 as both central to the scale and peripheral
+**Decision (confirmed): single-connection.** BLE peripherals (this class of
+device very much included) typically only accept one central connection at
+a time — still untested for the Dot specifically, but assumed until proven
+otherwise. If you do get a chance to test by connecting the custom
+firmware and the official Timemore app simultaneously, update this note
+with the actual result.
+
+Given that, the ESP32 is treated as the sole BLE client, and data fans out
+over the network instead of trying to share the BLE connection — this is
+implemented in `timemore-dot-display.yaml`:
+- `api:` (with an encryption key) is the primary path — Home Assistant
+  auto-discovers it and gets the weight/battery/connected/tare entities
+  defined in that file's `sensor:`/`binary_sensor:`/`button:` sections.
+- An `mqtt:` block is included commented-out for any non-Home-Assistant
+  consumer that wants the same data.
+
+A true BLE relay (ESP32 as both central to the scale and peripheral
   re-advertising its own service) is possible but nontrivial, and wouldn't
   let the *official* Timemore app connect to the relay — only a custom
   client you write yourself.
@@ -163,7 +194,14 @@ ESPHome config):
 ## Open items / unverified — check these first in Claude Code
 
 1. **Exact display/touch driver and pinout** for the specific board
-   purchased — not yet identified.
+   purchased — still not confirmed. `timemore-dot-display.yaml` currently
+   guesses the pinout for the commonly-sold "Cheap Yellow Display"
+   (ESP32-2432S028R, ILI9341 + resistive XPT2046) because the original
+   listing description matches that board's usual marketing copy closely —
+   but this is a guess based on how these boards are typically sold, not a
+   confirmed match to the actual unit. Confirm against the board's
+   silkscreen/schematic (or just attempt a build and see what doesn't
+   initialize) before trusting any pin number in that file.
 2. **Icon font** — the LVGL config uses placeholder codepoints
    (`\U0000E000` etc.) for all icons (wifi, bluetooth, battery, tare, play,
    pause, refresh, coffee, cup). Need to pick and bundle a real icon font
@@ -174,16 +212,42 @@ ESPHome config):
    the plain `arc` widget (as opposed to `meter` arc indicators, which
    definitely changed between LVGL 8 and 9). Verify against current
    ESPHome docs / by attempting a build.
-4. **`timemore_dot` external component** — not written yet (see above).
-5. Repo `timemore-dot-esp32-display` was being set up on GitHub but not yet
-   confirmed created — no GitHub connector was available to do this
-   automatically; needs to be created manually (github.com/new or
-   `gh repo create`) if not already done.
+4. **`timemore_dot` external component** — written (`components/timemore_dot/`)
+   but **never compiled or run** — see the caveat under "`timemore_dot`
+   component" above. The NimBLE-Arduino ~1.4.x API surface it's written
+   against (`setScanCallbacks`, `secureConnection()`, the `subscribe()`
+   callback signature) is the most likely thing to need adjusting on a
+   real build.
+5. **Touchscreen calibration** — `calibration_x_min/max`/`y_min/max` in
+   `timemore-dot-display.yaml` are uncalibrated placeholders (full raw
+   ADC range). Run the touchscreen through ESPHome's calibration process
+   once it's flashed and paste the real values in.
+6. Repo created: [github.com/nugeOG/timemore-dot-display](https://github.com/nugeOG/timemore-dot-display)
+   (private).
+7. **Font files are missing — this will fail to build as-is.**
+   `scale-display-lvgl.yaml`'s `font:` block references
+   `fonts/Inter-Medium.ttf`, `fonts/Inter-Regular.ttf`, and
+   `fonts/icon-subset.ttf`, but no `fonts/` directory exists in this repo —
+   these are binary font assets that weren't fetched. Inter is free (SIL
+   OFL) — download it (e.g. from Google Fonts) and drop the Medium/Regular
+   weights in under `fonts/`. The icon font subset still needs to be
+   assembled per open item #2 above before either will compile.
 
 ## Files included in this handoff
 
 - `HANDOFF.md` — this file
+- `timemore-dot-display.yaml` — the top-level ESPHome device config: wifi,
+  `api:`/`mqtt:` network fan-out, display/touch driver (placeholder pins,
+  see open item #1), the `timemore_dot` component, and the sensor/
+  binary_sensor/button entities wired into the LVGL labels.
 - `scale-display-lvgl.yaml` — the LVGL screen config (status row, weight,
-  timer, buttons, reset-hold logic). Contains inline comments on the same
-  open items listed above, plus a commented-out section showing how to
-  wire live sensors into the labels.
+  timer, buttons, reset-hold logic), included by the file above as a
+  `packages:` entry. Contains inline comments on the same open items
+  listed above.
+- `components/timemore_dot/` — the custom BLE component (see above):
+  `__init__.py`, `sensor.py`, `binary_sensor.py`, `button.py`,
+  `timemore_dot.h`, `timemore_dot.cpp`.
+- `secrets.yaml.example` — template for the `secrets.yaml` the ESPHome
+  add-on expects (wifi credentials, API encryption key, OTA password).
+- `.gitignore` — excludes `secrets.yaml`, the `.esphome/` build cache, and
+  `*.bin` build artifacts.

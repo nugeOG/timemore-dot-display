@@ -10,9 +10,15 @@
 #   touchscreen:     id: main_touch
 #   time:           id: sntp_time         (platform: sntp)
 #   wifi:                                  (for wifi_signal % sensor below)
-#   sensor.weight_grams        - published by your timemore_dot component
-#   sensor.scale_battery       - published by your timemore_dot component
-#   binary_sensor.ble_connected - published by your timemore_dot component
+#   sensor.weight_grams        - published by the timemore_dot component
+#   sensor.scale_battery       - published by the timemore_dot component
+#   binary_sensor.ble_connected - published by the timemore_dot component
+#   button.tare_button         - published by the timemore_dot component
+#
+# These are all defined in timemore-dot-display.yaml, the top-level device
+# config that includes this file as a package — that's also where the
+# on_value/on_state triggers wiring them into the labels below actually
+# live, since they belong on the sensor/binary_sensor entries themselves.
 #
 # Two things flagged as PLACEHOLDERS you must fill in before this compiles:
 #
@@ -143,10 +149,7 @@ interval:
 script:
   - id: do_tare
     then:
-      - lambda: |-
-          // Replace with your actual component call, e.g.:
-          // id(timemore_dot_scale)->tare();
-          ESP_LOGD("ui", "Tare requested");
+      - button.press: tare_button
       # Suppress auto-stop false triggers for 1.5s after a manual tare —
       # a tare causes an instant weight drop that otherwise looks like
       # "cup removed" to the auto-timer logic.
@@ -404,61 +407,16 @@ lvgl:
               - script.execute: toggle_mode
 
 # ----------------------------------------------------------------------------
-# Wiring live sensors into the labels above — add these `on_value` triggers
-# to your existing sensor/binary_sensor definitions from the BLE component
-# phase (shown here as standalone blocks to illustrate the binding; merge
-# the `on_value` sections into your actual sensor entries rather than
-# duplicating the sensors themselves).
+# Live sensor wiring now lives in timemore-dot-display.yaml (the top-level
+# device config that includes this file as a package), on the
+# sensor/binary_sensor/button entries themselves — weight_grams,
+# scale_battery, wifi_signal_pct, ble_connected, tare_button. See that file's
+# `on_value`/`on_state` triggers and the do_tare script above for how they
+# reach the labels/buttons defined in this file.
+#
+# Still not wired to anything: lbl_wifi_icon never updates (only one wifi
+# glyph exists in the icon font — see the icon-font open item in
+# HANDOFF.md, tiered strong/medium/weak icons would need more glyphs first)
+# and the auto-timer start/stop detection that would show/hide
+# lbl_auto_badge — both flagged as open items in HANDOFF.md.
 # ----------------------------------------------------------------------------
-#
-# sensor:
-#   - id: weight_grams
-#     on_value:
-#       then:
-#         - lvgl.label.update:
-#             id: lbl_weight
-#             text: !lambda 'return str_sprintf("%.1f", x);'
-#         # simple flow-rate estimate from consecutive weight samples —
-#         # replace with your own smoothed rolling-window calculation
-#         - lvgl.label.update:
-#             id: lbl_flow
-#             text: !lambda |-
-#               static float last_weight = 0;
-#               static uint32_t last_time = 0;
-#               uint32_t now = millis();
-#               float rate = 0;
-#               if (last_time != 0 && now > last_time) {
-#                 rate = (x - last_weight) / ((now - last_time) / 1000.0f);
-#               }
-#               last_weight = x;
-#               last_time = now;
-#               return str_sprintf("%.1f g/s", rate);
-#         # auto-timer state machine hook — expand per the earlier
-#         # start/stop-detection design (debounce, tare suppression window,
-#         # pour-over plateau vs. espresso cup-removed logic)
-#
-#   - id: scale_battery
-#     on_value:
-#       then:
-#         - lvgl.label.update:
-#             id: lbl_battery_pct
-#             text: !lambda 'return str_sprintf("%.0f%%", x);'
-#
-#   - platform: wifi_signal
-#     id: wifi_signal_pct
-#     on_value:
-#       then:
-#         - lvgl.label.update:
-#             id: lbl_wifi_icon
-#             text: !lambda |-
-#               if (x > -60) return "\U0000E000";       // strong
-#               else if (x > -75) return "\U0000E000";  // medium (swap glyph if you have tiered icons)
-#               else return "\U0000E000";                // weak
-#
-# binary_sensor:
-#   - id: ble_connected
-#     on_state:
-#       then:
-#         - lvgl.label.update:
-#             id: lbl_bt_icon
-#             text_color: !lambda 'return x ? lv_color_hex(0x5DCAA5) : lv_color_hex(0x7A7A76);'
