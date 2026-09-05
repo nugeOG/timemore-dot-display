@@ -1,0 +1,464 @@
+# ============================================================================
+# LVGL screen config — Timemore Dot companion display
+# ============================================================================
+#
+# This file assumes the following already exist elsewhere in your ESPHome
+# config (display driver, touchscreen driver, wifi:, time:, and the custom
+# `timemore_dot` BLE component from the earlier phase of this project):
+#
+#   display:        id: main_lcd
+#   touchscreen:     id: main_touch
+#   time:           id: sntp_time         (platform: sntp)
+#   wifi:                                  (for wifi_signal % sensor below)
+#   sensor.weight_grams        - published by your timemore_dot component
+#   sensor.scale_battery       - published by your timemore_dot component
+#   binary_sensor.ble_connected - published by your timemore_dot component
+#
+# Two things flagged as PLACEHOLDERS you must fill in before this compiles:
+#
+#   1. Icon glyphs (\U0000XXXX codepoints below). LVGL does not ship Tabler
+#      icons. You need to bundle an icon font (a subset TTF containing just
+#      the glyphs you use keeps flash usage small) and swap in its real
+#      codepoints, or replace the icon labels with small PNGs via an
+#      `image:` + `lvgl.image` widget instead of a font glyph approach.
+#
+#   2. `lvgl.arc.update` — this is the ESPHome LVGL action name for updating
+#      an arc widget's value at the time of writing. LVGL/ESPHome's API
+#      shifts between versions (there was a real breaking change between
+#      LVGL 8 and 9 affecting arc/meter indicators) — verify this action
+#      name against the ESPHome version you're actually building against
+#      before relying on it: https://esphome.io/components/lvgl/widgets/
+#
+# Design decision: the reset hold-progress ring and its 1.5s trigger are
+# implemented manually (on_press/on_release + a 30ms interval) rather than
+# via LVGL's built-in long-press event. There's an open, unresolved
+# community question about configuring long-press timing for touchscreen
+# button presses specifically (it's well-documented for rotary
+# encoder/keypad input devices, not clearly for touch) — so a
+# fully-manual timer avoids depending on unclear behavior for something
+# you want at an exact, specific duration.
+# ============================================================================
+
+font:
+  - file: "fonts/Inter-Medium.ttf"
+    id: font_time
+    size: 18
+  - file: "fonts/Inter-Medium.ttf"
+    id: font_weight
+    size: 60
+  - file: "fonts/Inter-Regular.ttf"
+    id: font_small
+    size: 11
+  - file: "fonts/Inter-Medium.ttf"
+    id: font_timer
+    size: 32
+  - file: "fonts/icon-subset.ttf"     # PLACEHOLDER — your bundled icon font
+    id: font_icons
+    size: 20
+    glyphs:
+      - "\U0000E000"   # wifi
+      - "\U0000E001"   # bluetooth connected
+      - "\U0000E002"   # battery
+      - "\U0000E003"   # droplet (flow rate)
+      - "\U0000E004"   # tare (arrows)
+      - "\U0000E005"   # play
+      - "\U0000E006"   # pause
+      - "\U0000E007"   # refresh (reset)
+      - "\U0000E008"   # coffee (pour-over mode)
+      - "\U0000E009"   # cup (espresso mode)
+
+globals:
+  - id: timer_seconds
+    type: int
+    restore_value: false
+    initial_value: '0'
+  - id: timer_running
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+  - id: reset_hold_ms
+    type: int
+    restore_value: false
+    initial_value: '0'
+  - id: brew_mode_espresso
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+  - id: tare_pending_until
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+  - id: reset_held
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+
+# ----------------------------------------------------------------------------
+# Timer tick + reset-hold ring animation
+# ----------------------------------------------------------------------------
+interval:
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(timer_running);'
+          then:
+            - lambda: 'id(timer_seconds) += 1;'
+            - lvgl.label.update:
+                id: lbl_timer
+                text: !lambda |-
+                  char buf[8];
+                  snprintf(buf, sizeof(buf), "%02d:%02d", id(timer_seconds) / 60, id(timer_seconds) % 60);
+                  return std::string(buf);
+
+  - interval: 30ms
+    then:
+      - if:
+          condition:
+            lambda: 'return id(reset_held) && id(reset_hold_ms) < 1500;'
+          then:
+            - lambda: 'id(reset_hold_ms) += 30;'
+            - lvgl.arc.update:
+                id: arc_reset
+                value: !lambda 'return id(reset_hold_ms);'
+            - if:
+                condition:
+                  lambda: 'return id(reset_hold_ms) >= 1500;'
+                then:
+                  - script.execute: do_reset
+
+  - interval: 1s
+    then:
+      # refresh clock + date labels from the sntp time source
+      - lvgl.label.update:
+          id: lbl_time
+          text: !lambda 'return id(sntp_time).now().strftime("%H:%M");'
+      - lvgl.label.update:
+          id: lbl_date
+          text: !lambda 'return id(sntp_time).now().strftime("%a, %b %d");'
+
+# ----------------------------------------------------------------------------
+# Actions
+# ----------------------------------------------------------------------------
+script:
+  - id: do_tare
+    then:
+      - lambda: |-
+          // Replace with your actual component call, e.g.:
+          // id(timemore_dot_scale)->tare();
+          ESP_LOGD("ui", "Tare requested");
+      # Suppress auto-stop false triggers for 1.5s after a manual tare —
+      # a tare causes an instant weight drop that otherwise looks like
+      # "cup removed" to the auto-timer logic.
+      - lambda: 'id(tare_pending_until) = millis() + 1500;'
+
+  - id: toggle_timer
+    then:
+      - lambda: 'id(timer_running) = !id(timer_running);'
+      - lvgl.label.update:
+          id: lbl_playpause_icon
+          text: !lambda 'return id(timer_running) ? "\U0000E006" : "\U0000E005";'
+      - lvgl.label.update:
+          id: lbl_playpause_text
+          text: !lambda 'return id(timer_running) ? "Pause" : "Start";'
+
+  - id: do_reset
+    then:
+      - lambda: |-
+          id(timer_running) = false;
+          id(timer_seconds) = 0;
+          id(reset_hold_ms) = 0;
+          id(reset_held) = false;
+      - lvgl.label.update:
+          id: lbl_timer
+          text: "00:00"
+      - lvgl.label.update:
+          id: lbl_playpause_icon
+          text: "\U0000E005"
+      - lvgl.label.update:
+          id: lbl_playpause_text
+          text: "Start"
+      - lvgl.arc.update:
+          id: arc_reset
+          value: 0
+
+  - id: toggle_mode
+    then:
+      - lambda: 'id(brew_mode_espresso) = !id(brew_mode_espresso);'
+      - lvgl.label.update:
+          id: lbl_mode
+          text: !lambda 'return id(brew_mode_espresso) ? "Espresso mode" : "Pour-over mode";'
+      - lvgl.label.update:
+          id: lbl_mode_icon
+          text: !lambda 'return id(brew_mode_espresso) ? "\U0000E009" : "\U0000E008";'
+
+# ----------------------------------------------------------------------------
+# Screen layout — target resolution 240x320 portrait
+# ----------------------------------------------------------------------------
+lvgl:
+  displays:
+    - main_lcd
+  touchscreens:
+    - main_touch
+  bg_color: 0x0B0F0E
+  pages:
+    - id: main_page
+      bg_color: 0x0B0F0E
+      widgets:
+
+        # ---- status row ----
+        - label:
+            id: lbl_time
+            x: 8
+            y: 8
+            text_font: font_time
+            text_color: 0xF2F2EF
+            text: "--:--"
+        - label:
+            id: lbl_date
+            x: 8
+            y: 30
+            text_font: font_small
+            text_color: 0x7A7A76
+            text: "----"
+        - label:
+            id: lbl_wifi_icon
+            x: 148
+            y: 10
+            text_font: font_icons
+            text_color: 0x5DCAA5
+            text: "\U0000E000"
+        - label:
+            id: lbl_bt_icon
+            x: 176
+            y: 10
+            text_font: font_icons
+            text_color: 0x5DCAA5
+            text: "\U0000E001"
+        - label:
+            id: lbl_battery_pct
+            x: 198
+            y: 12
+            text_font: font_small
+            text_color: 0xC9C9C4
+            text: "--%"
+        - label:
+            id: lbl_battery_icon
+            x: 222
+            y: 10
+            text_font: font_icons
+            text_color: 0xC9C9C4
+            text: "\U0000E002"
+
+        # ---- weight ----
+        - label:
+            id: lbl_weight
+            align: TOP_MID
+            y: 88
+            text_font: font_weight
+            text_color: 0xF2F2EF
+            text: "0.0"
+        - label:
+            id: lbl_flow_icon
+            align: TOP_MID
+            y: 160
+            x: -28
+            text_font: font_icons
+            text_color: 0x7A7A76
+            text: "\U0000E003"
+        - label:
+            id: lbl_flow
+            align: TOP_MID
+            y: 160
+            x: 4
+            text_font: font_small
+            text_color: 0x7A7A76
+            text: "0.0 g/s"
+
+        # ---- timer ----
+        - label:
+            id: lbl_timer
+            align: TOP_MID
+            y: 192
+            text_font: font_timer
+            text_color: 0xF2F2EF
+            text: "00:00"
+        # "auto" badge — hidden by default; show/hide this from the
+        # auto-timer detection logic once it's implemented (see HANDOFF.md,
+        # "Auto-timer logic"). Position is a first guess, not yet verified
+        # against real rendering.
+        - label:
+            id: lbl_auto_badge
+            align: TOP_MID
+            x: 54
+            y: 198
+            text_font: font_small
+            text_color: 0x5DCAA5
+            text: "AUTO"
+            hidden: true
+        - label:
+            id: lbl_mode
+            align: TOP_MID
+            y: 230
+            text_font: font_small
+            text_color: 0x7A7A76
+            text: "Pour-over mode"
+
+        # ---- button row (y baseline ~254, screen bottom margin 20px) ----
+        - button:
+            id: btn_tare
+            x: 8
+            y: 254
+            width: 46
+            height: 46
+            radius: 23
+            bg_color: 0x1C211F
+            widgets:
+              - label:
+                  align: CENTER
+                  text_font: font_icons
+                  text_color: 0xF2F2EF
+                  text: "\U0000E004"
+            on_click:
+              - script.execute: do_tare
+
+        - button:
+            id: btn_playpause
+            x: 64
+            y: 246
+            width: 54
+            height: 54
+            radius: 27
+            bg_color: 0x1D9E75
+            widgets:
+              - label:
+                  id: lbl_playpause_icon
+                  align: CENTER
+                  text_font: font_icons
+                  text_color: 0x04342C
+                  text: "\U0000E005"
+            on_click:
+              - script.execute: toggle_timer
+
+        # reset control: arc (progress ring) + button drawn as overlapping
+        # siblings — the button is declared after the arc so it renders on
+        # top, avoiding any assumption about whether `arc` supports nested
+        # child widgets.
+        - arc:
+            id: arc_reset
+            x: 124
+            y: 250
+            width: 54
+            height: 54
+            min_value: 0
+            max_value: 1500
+            value: 0
+            arc_width: 6
+            arc_color: 0x2A302D
+            adjustable: false
+            indicator:
+              arc_width: 6
+              arc_color: 0xF09595
+        - button:
+            id: btn_reset
+            x: 130
+            y: 256
+            width: 42
+            height: 42
+            radius: 21
+            bg_color: 0x1C211F
+            widgets:
+              - label:
+                  align: CENTER
+                  text_font: font_icons
+                  text_color: 0xF2F2EF
+                  text: "\U0000E007"
+            on_press:
+              - lambda: |-
+                  id(reset_held) = true;
+                  id(reset_hold_ms) = 0;
+            on_release:
+              - lambda: |-
+                  id(reset_held) = false;
+                  id(reset_hold_ms) = 0;
+              - lvgl.arc.update:
+                  id: arc_reset
+                  value: 0
+
+        - button:
+            id: btn_mode
+            x: 186
+            y: 254
+            width: 46
+            height: 46
+            radius: 23
+            bg_color: 0x1C211F
+            widgets:
+              - label:
+                  id: lbl_mode_icon
+                  align: CENTER
+                  text_font: font_icons
+                  text_color: 0xF2F2EF
+                  text: "\U0000E008"
+            on_click:
+              - script.execute: toggle_mode
+
+# ----------------------------------------------------------------------------
+# Wiring live sensors into the labels above — add these `on_value` triggers
+# to your existing sensor/binary_sensor definitions from the BLE component
+# phase (shown here as standalone blocks to illustrate the binding; merge
+# the `on_value` sections into your actual sensor entries rather than
+# duplicating the sensors themselves).
+# ----------------------------------------------------------------------------
+#
+# sensor:
+#   - id: weight_grams
+#     on_value:
+#       then:
+#         - lvgl.label.update:
+#             id: lbl_weight
+#             text: !lambda 'return str_sprintf("%.1f", x);'
+#         # simple flow-rate estimate from consecutive weight samples —
+#         # replace with your own smoothed rolling-window calculation
+#         - lvgl.label.update:
+#             id: lbl_flow
+#             text: !lambda |-
+#               static float last_weight = 0;
+#               static uint32_t last_time = 0;
+#               uint32_t now = millis();
+#               float rate = 0;
+#               if (last_time != 0 && now > last_time) {
+#                 rate = (x - last_weight) / ((now - last_time) / 1000.0f);
+#               }
+#               last_weight = x;
+#               last_time = now;
+#               return str_sprintf("%.1f g/s", rate);
+#         # auto-timer state machine hook — expand per the earlier
+#         # start/stop-detection design (debounce, tare suppression window,
+#         # pour-over plateau vs. espresso cup-removed logic)
+#
+#   - id: scale_battery
+#     on_value:
+#       then:
+#         - lvgl.label.update:
+#             id: lbl_battery_pct
+#             text: !lambda 'return str_sprintf("%.0f%%", x);'
+#
+#   - platform: wifi_signal
+#     id: wifi_signal_pct
+#     on_value:
+#       then:
+#         - lvgl.label.update:
+#             id: lbl_wifi_icon
+#             text: !lambda |-
+#               if (x > -60) return "\U0000E000";       // strong
+#               else if (x > -75) return "\U0000E000";  // medium (swap glyph if you have tiered icons)
+#               else return "\U0000E000";                // weak
+#
+# binary_sensor:
+#   - id: ble_connected
+#     on_state:
+#       then:
+#         - lvgl.label.update:
+#             id: lbl_bt_icon
+#             text_color: !lambda 'return x ? lv_color_hex(0x5DCAA5) : lv_color_hex(0x7A7A76);'
