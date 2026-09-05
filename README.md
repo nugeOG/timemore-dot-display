@@ -27,9 +27,14 @@ details.
   browsers. It doesn't need to be the same machine Home Assistant itself
   runs on — it just needs to be whichever computer you plug the board
   into and have the browser tab open on.
-- **This repo's files, downloaded to your computer.** If you're reading
-  this from the GitHub repo, use the green "Code" button → "Download ZIP",
-  then unzip it somewhere you can find (e.g. your Desktop).
+- **Two files downloaded from this repo** — that's all you need locally;
+  everything else is pulled automatically from GitHub at build time (see
+  Step 2). On [the repo's GitHub page](https://github.com/nugeOG/timemore-dot-display),
+  for each of these two files: click the file name to open it, click the
+  **Raw** button near the top right, then save the page (⌘S on a Mac) to
+  somewhere you can find it, e.g. your Desktop:
+  - `timemore-dot-display.yaml`
+  - `secrets.yaml.example`
 
 ## Step 1 — Install the ESPHome add-on
 
@@ -40,7 +45,17 @@ details.
    click **Start**.
 4. You should now see an **ESPHome** icon in your Home Assistant sidebar.
 
-## Step 2 — Copy the project files onto your Home Assistant
+## Step 2 — Get those two files onto your Home Assistant
+
+Only `timemore-dot-display.yaml` and `secrets.yaml` (which you'll create
+from the `.example` file in the next step) need to actually live on your
+Home Assistant. The screen layout (`scale-display-lvgl.yaml`) and the BLE
+scale component (`components/timemore_dot/`) are fetched straight from
+this project's GitHub repo every time the device builds — that's what the
+`external_components:` and `packages:` sections near the top of
+`timemore-dot-display.yaml` do. You never need to copy those yourself, and
+you'll automatically get any future improvements pushed to the repo the
+next time you build (it checks for updates hourly).
 
 The ESPHome add-on looks for device configs in a folder on your Home
 Assistant called `config/esphome/`. The easiest way to get files into that
@@ -61,13 +76,9 @@ folder from your computer is a network file share:
    prompted, enter the username/password you set in step 2.
 4. Double-click the **config** share to open it. If there's no `esphome`
    folder inside, create one (name it exactly `esphome`, lowercase).
-5. From the unzipped project folder on your computer, copy **everything
-   inside it** into that `esphome` folder — `timemore-dot-display.yaml`,
-   `scale-display-lvgl.yaml`, `secrets.yaml.example`, and the whole
-   `components` folder (with all the files inside it). Make sure
-   `components` stays a folder, not flattened — the path
-   `esphome/components/timemore_dot/timemore_dot.h` should exist after
-   copying.
+5. Copy the two files you downloaded in "Before you start" —
+   `timemore-dot-display.yaml` and `secrets.yaml.example` — into that
+   `esphome` folder. No subfolders to worry about this time.
 
 ## Step 3 — Create your secrets file
 
@@ -104,8 +115,9 @@ values, kept out of the main config file in a separate `secrets.yaml`.
    click the add-on's refresh icon, or restart the ESPHome add-on from
    **Settings → Add-ons → ESPHome → Restart**.
 3. If the dashboard shows a red error instead of the device card, open it
-   to read the error — it's usually a typo in `secrets.yaml`, or the
-   `components` folder not having copied over completely (see Step 2).
+   to read the error — it's usually a typo in `secrets.yaml`, or your
+   Home Assistant not having internet access to fetch the GitHub-sourced
+   files described in Step 2.
 
 ## Step 5 — First install, over USB
 
@@ -181,9 +193,11 @@ checking once you have a physical board in hand — full details are in
   into USB and run **Install → Plug into this computer** again (a board
   that can't reach wifi at all can't receive an update wirelessly).
 - **ESPHome dashboard shows a build error mentioning
-  `components/timemore_dot`** — the `components` folder likely didn't
-  copy over completely in Step 2. Reconnect via Samba and confirm all six
-  files are present inside `esphome/components/timemore_dot/`.
+  `external_components` or `packages` failing to fetch/clone** — your
+  Home Assistant needs internet access at build time to pull
+  `scale-display-lvgl.yaml` and the `timemore_dot` component from GitHub
+  (see Step 2). Also double-check `timemore-dot-display.yaml` was saved
+  with that exact name (case-sensitive).
 - **Device appears in Home Assistant but entities say "Unavailable"** —
   most likely the board can't connect to the scale over Bluetooth yet.
   Check the device's logs in the ESPHome dashboard for `[timemore_dot]`

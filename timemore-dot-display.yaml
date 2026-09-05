@@ -2,9 +2,14 @@
 # Timemore Dot companion display — top-level ESPHome device config
 # ============================================================================
 #
-# Built for the Home Assistant ESPHome add-on. Drop this whole repo
-# (this file, scale-display-lvgl.yaml, components/) into the
-# add-on's config folder and it should show up as a device to install.
+# Built for the Home Assistant ESPHome add-on. This is the only file you
+# need to place in the add-on's config folder yourself (alongside
+# secrets.yaml) — the LVGL screen config and the timemore_dot component are
+# pulled straight from this project's public GitHub repo at build time via
+# `packages:`/`external_components:` below, so you don't need to copy
+# scale-display-lvgl.yaml or the components/ folder by hand. See README.md
+# for the full walkthrough.
+#
 # Needs secrets.yaml alongside it — copy secrets.yaml.example and fill in
 # real values (the ESPHome add-on keeps one shared secrets.yaml for all your
 # device configs, so you likely already have one; just add these keys to it).
@@ -134,10 +139,15 @@ touchscreen:
 # ----------------------------------------------------------------------
 # BLE scale component + entities
 # ----------------------------------------------------------------------
+# Pulled directly from GitHub -- `refresh: 1h` means it re-checks for
+# updates once an hour rather than ESPHome's 1-day default, since this
+# project is still under active, untested development. Turn that down
+# (e.g. `refresh: 1d`, or `never` to pin) once it's stable and you'd
+# rather not risk an in-progress upstream change breaking your build.
 external_components:
-  - source:
-      type: local
-      path: components
+  - source: github://nugeOG/timemore-dot-display@main
+    components: [timemore_dot]
+    refresh: 1h
 
 timemore_dot:
   id: dot_scale
@@ -214,4 +224,8 @@ button:
     id: tare_button
 
 packages:
-  lvgl_screen: !include scale-display-lvgl.yaml
+  lvgl_screen:
+    url: https://github.com/nugeOG/timemore-dot-display
+    files: [scale-display-lvgl.yaml]
+    ref: main
+    refresh: 1h
