@@ -10,10 +10,9 @@ of a planning conversation — none of it has been built or tested on real
 hardware yet.
 
 Repo: [github.com/nugeOG/timemore-dot-display](https://github.com/nugeOG/timemore-dot-display)
-(private). Built to run via the **Home Assistant ESPHome add-on** — copy
-this whole repo into the add-on's config folder (alongside your existing
-`secrets.yaml`, or copy `secrets.yaml.example` to start one) and it should
-show up as an installable device.
+(private). Built to run via the **Home Assistant ESPHome add-on**. For
+step-by-step build/install instructions, see [README.md](README.md) — this
+doc is technical background and status, not a setup guide.
 
 ## Hardware
 
@@ -235,6 +234,8 @@ ESPHome config):
 ## Files included in this handoff
 
 - `HANDOFF.md` — this file
+- `README.md` — step-by-step build/install instructions via the Home
+  Assistant ESPHome add-on, written for a first-time/inexperienced user
 - `timemore-dot-display.yaml` — the top-level ESPHome device config: wifi,
   `api:`/`mqtt:` network fan-out, display/touch driver (placeholder pins,
   see open item #1), the `timemore_dot` component, and the sensor/
