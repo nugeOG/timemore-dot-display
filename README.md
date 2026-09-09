@@ -101,9 +101,9 @@ values, kept out of the main config file in a separate `secrets.yaml`.
      ```bash
      python3 -c "import os,base64;print(base64.b64encode(os.urandom(32)).decode())"
      ```
-     Copy the string it prints and paste it in as the value.
-   - `ota_password` — any password you choose, used for future wireless
-     updates.
+     Copy the string it prints and paste it in as the value. This same key
+     also authenticates future wireless updates — no separate OTA password
+     needed.
    - Leave the commented-out `mqtt_*` lines alone unless you specifically
      want MQTT — they're not needed for Home Assistant.
 3. Save the file.

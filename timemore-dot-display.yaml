@@ -64,7 +64,11 @@ api:
 
 ota:
   - platform: esphome
-    password: !secret ota_password
+    # A bare `encryption:` block (no key) inherits the api: encryption key
+    # above instead of a separate password -- a plaintext password is
+    # redundant once uploads already require that key, and costs extra
+    # flash/RAM to boot.
+    encryption:
 
 # Uncomment for non-Home-Assistant consumers. Requires an MQTT broker
 # reachable from this device's wifi network (e.g. Mosquitto).
@@ -108,6 +112,12 @@ display:
     cs_pin: GPIO15
     dc_pin: GPIO2
     rotation: 0
+    # Became a required option (no default) in a newer ESPHome release than
+    # this was originally written against. `false` is the common default
+    # for this panel, but it's a real per-panel property, not a placeholder
+    # -- if colors look inverted/negative once you can see the screen
+    # (e.g. the dark background renders light), flip this to `true`.
+    invert_colors: false
 
 output:
   - platform: ledc
@@ -130,11 +140,15 @@ touchscreen:
   update_interval: 50ms
   # Run through the touchscreen calibration process and paste the reported
   # values here before relying on touch accuracy — these are uncalibrated
-  # placeholders.
-  calibration_x_min: 0
-  calibration_x_max: 4095
-  calibration_y_min: 0
-  calibration_y_max: 4095
+  # placeholders. If touch ends up mirrored or rotated relative to the
+  # screen once you can actually test it, add a `transform:` block here
+  # (swap_xy / mirror_x / mirror_y) -- not something that can be predicted
+  # without seeing it happen.
+  calibration:
+    x_min: 0
+    x_max: 4095
+    y_min: 0
+    y_max: 4095
 
 # ----------------------------------------------------------------------
 # BLE scale component + entities

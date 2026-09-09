@@ -251,6 +251,7 @@ ESPHome config):
   `__init__.py`, `sensor.py`, `binary_sensor.py`, `button.py`,
   `timemore_dot.h`, `timemore_dot.cpp`.
 - `secrets.yaml.example` — template for the `secrets.yaml` the ESPHome
-  add-on expects (wifi credentials, API encryption key, OTA password).
+  add-on expects (wifi credentials, API encryption key -- also used to
+  authenticate OTA updates, no separate OTA password).
 - `.gitignore` — excludes `secrets.yaml`, the `.esphome/` build cache, and
   `*.bin` build artifacts.
