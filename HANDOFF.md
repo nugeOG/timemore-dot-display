@@ -190,13 +190,24 @@ from that log, both fixed (unverified until the next flash):
    shared radio — only `esp32_ble`'s own `to_code()` normally calls
    `esp32.request_software_coexistence()`, and this component deliberately
    doesn't use `esp32_ble`. Added that call to
-   `components/timemore_dot/__init__.py`. **Not yet confirmed this fixes
-   it** — if the identical crash recurs after this, the next thing to try
-   is delaying `NimBLEDevice::init()` until wifi has actually finished
-   connecting (`wifi::global_wifi_component->is_connected()`), not just
-   finished its own `setup()` — the crash happens while
-   `[D][wifi:1334]: Starting scan` is still active, so "wifi setup done"
-   and "radio actually free" may not be the same moment.
+   `components/timemore_dot/__init__.py`. **Tried, did not fix it** —
+   rebuilt and reflashed with the coexistence request in place; identical
+   crash, identical `EXCVADDR` values, same backtrace shape. The
+   esp-nimble-cpp#113 fault-address match was a real, specific lead, but
+   turned out to be either the wrong cause or an incomplete fix for it.
+10. Since guessing further wasn't converging (no ELF available here to
+    symbolize the actual backtrace), switched to instrumenting instead:
+    `TimemoreDot::setup()` now logs on entry, and separately logs and
+    bails out (rather than silently continuing) if `NimBLEDevice::init()`
+    returns `false` — a real bug regardless of whether it's the crash
+    cause, since the old code ignored that return value and would
+    configure security / start scanning against whatever partial state a
+    failed `init()` left behind. **Whichever of these log lines does or
+    doesn't appear in the next boot log will localize the crash for
+    real** — if even the entry log is missing, the crash isn't in this
+    component at all and every theory above is wrong; if entry logs but
+    `init()` never returns, the crash is inside NimBLE's own init
+    sequence as suspected, just not fixed by coexistence alone.
 
 The code for all of the following now exists, and it's now been through a
 real boot (see milestone above) — when you build next, verify in this

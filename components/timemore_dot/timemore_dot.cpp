@@ -38,7 +38,26 @@ class TimemoreDotScanCallbacks : public NimBLEScanCallbacks {
 };
 
 void TimemoreDot::setup() {
-  NimBLEDevice::init("");
+  // Boot crashed 100% reproducibly with no log line from this component
+  // ever appearing before it -- this line exists to prove, on the next
+  // boot, whether execution reaches this component's setup() at all
+  // before whatever crashes it. If this doesn't print either, the crash
+  // isn't in this component.
+  ESP_LOGI(TAG, "TimemoreDot::setup() entered");
+
+  bool ok = NimBLEDevice::init("");
+  ESP_LOGI(TAG, "NimBLEDevice::init() returned %s", ok ? "true" : "false");
+  if (!ok) {
+    // Previously ignored this return value entirely and fell through to
+    // configure security / start scanning against whatever partial state
+    // init() left behind -- if init() fails partway through (bad sdkconfig,
+    // controller/radio contention with wifi, etc.) that's a very plausible
+    // way to crash deep in NimBLE's own code with no log of our own to
+    // show for it. Bail out instead; loop() will never get a working scale
+    // connection, but at least it won't crash-loop the whole board.
+    ESP_LOGE(TAG, "NimBLEDevice::init() failed -- scale connection will not work this boot");
+    return;
+  }
 
   // "Just works" bonding: the scale has no display/keyboard to confirm a
   // passkey against, and the reference driver doesn't do passkey entry
