@@ -176,7 +176,7 @@ script:
       - lambda: 'id(timer_running) = !id(timer_running);'
       - lvgl.label.update:
           id: lbl_playpause_icon
-          text: !lambda 'return id(timer_running) ? "\U0000E034" : "\U0000E037";'
+          text: !lambda 'return std::string(id(timer_running) ? "\U0000E034" : "\U0000E037");'
 
   - id: do_reset
     then:
@@ -200,10 +200,10 @@ script:
       - lambda: 'id(brew_mode_espresso) = !id(brew_mode_espresso);'
       - lvgl.label.update:
           id: lbl_mode
-          text: !lambda 'return id(brew_mode_espresso) ? "Espresso mode" : "Pour-over mode";'
+          text: !lambda 'return std::string(id(brew_mode_espresso) ? "Espresso mode" : "Pour-over mode");'
       - lvgl.label.update:
           id: lbl_mode_icon
-          text: !lambda 'return id(brew_mode_espresso) ? "\U0000EB44" : "\U0000EFEF";'
+          text: !lambda 'return std::string(id(brew_mode_espresso) ? "\U0000EB44" : "\U0000EFEF");'
 
 # ----------------------------------------------------------------------------
 # Screen layout — target resolution 240x320 portrait

@@ -229,7 +229,7 @@ binary_sensor:
         then:
           - lvgl.label.update:
               id: lbl_bt_icon
-              text: !lambda 'return x ? "\U0000E1A8" : "\U0000E1A9";'
+              text: !lambda 'return std::string(x ? "\U0000E1A8" : "\U0000E1A9");'
               text_color: !lambda 'return x ? lv_color_hex(0x5DCAA5) : lv_color_hex(0x7A7A76);'
 
 button:

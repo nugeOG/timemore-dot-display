@@ -137,7 +137,18 @@ and fixed so far, in order:
    `CONFIG_BT_NIMBLE_ENABLED` sdkconfig calls nothing else in this config
    would otherwise trigger, since BLE is deliberately not requested via
    `esp32_ble_tracker:`/`ble_client:`. See `components/timemore_dot/__init__.py`
-   for the full reasoning and source citations.
+   for the full reasoning and source citations. This got compilation past
+   the point of even touching BLE code -- next error was unrelated (below).
+6. Four LVGL `!lambda` text updates returned a raw ternary of C string
+   literals (`cond ? "A" : "B"`), which resolves to `const char*`/
+   `const char[N]`, not `std::string` -- but ESPHome's generated code calls
+   `.c_str()` on the lambda's result assuming it's std::string-like,
+   which only compiles for a real `std::string`. Fixed by wrapping each in
+   `std::string(...)`. Affected: the bluetooth icon glyph swap
+   (`timemore-dot-display.yaml`), and the play/pause icon + both mode-label
+   text and icon updates (`scale-display-lvgl.yaml`). The weight/battery/
+   flow labels were already fine since they go through `str_sprintf()`,
+   which does return `std::string`.
 
 The code for all of the following now exists, but none of it has been
 exercised on hardware — when you actually build, verify in this order
