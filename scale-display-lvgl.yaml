@@ -177,9 +177,6 @@ script:
       - lvgl.label.update:
           id: lbl_playpause_icon
           text: !lambda 'return id(timer_running) ? "\U0000E034" : "\U0000E037";'
-      - lvgl.label.update:
-          id: lbl_playpause_text
-          text: !lambda 'return id(timer_running) ? "Pause" : "Start";'
 
   - id: do_reset
     then:
@@ -194,9 +191,6 @@ script:
       - lvgl.label.update:
           id: lbl_playpause_icon
           text: "\U0000E037"
-      - lvgl.label.update:
-          id: lbl_playpause_text
-          text: "Start"
       - lvgl.arc.update:
           id: arc_reset
           value: 0
