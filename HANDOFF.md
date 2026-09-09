@@ -153,17 +153,16 @@ and fixed so far, in order:
 **Milestone: it compiled, flashed, and booted on the real board.** First
 real boot log obtained via OTA logs, screen stayed blank. Two issues found
 from that log, both fixed (unverified until the next flash):
-7. `[W][lvgl:998]: Failed to allocate 153600 bytes for draw buffer`,
-   followed shortly after by a `Guru Meditation Error: ... (LoadProhibited)`
-   crash-and-reboot loop (10 attempts, then ESPHome's safe-mode kicked in).
-   This board has no PSRAM configured, so LVGL's default 100%-of-screen
-   draw buffer (153,600 bytes = 240×320×2) doesn't fit in whatever's left
-   of internal RAM once wifi/BLE have claimed their share — and rather
-   than cleanly falling back to a smaller buffer, something dereferenced
-   the failed allocation (the crash addresses, tiny offsets like `0x98`/
-   `0xa8`, look exactly like a null-pointer struct access). Set
+7. `[W][lvgl:998]: Failed to allocate 153600 bytes for draw buffer` — this
+   board has no PSRAM configured, so LVGL's default 100%-of-screen draw
+   buffer (153,600 bytes = 240×320×2) didn't fit in whatever's left of
+   internal RAM once wifi/BLE have claimed their share. Set
    `buffer_size: 25%` in `scale-display-lvgl.yaml`'s `lvgl:` block —
-   ESPHome's own documented recommendation for PSRAM-less boards.
+   ESPHome's own documented recommendation for PSRAM-less boards. **This
+   fixed the allocation warning** (confirmed gone in the next boot log)
+   **but turned out to be unrelated to the crash below** — same crash,
+   same fault address, still happened with the warning gone. Real
+   allocation bug, real fix, just not the one causing the reboot loop.
 8. `E (472) gpio: gpio_pullup_en(...): GPIO number error (input-only pad
    has no internal PU)`, logged once per boot right before "Attach Touch
    Interrupt". GPIO36 (the touchscreen `interrupt_pin` guess) is one of
@@ -174,6 +173,30 @@ from that log, both fixed (unverified until the next flash):
    touch panel having its own external pull-up on T_IRQ, which is
    standard for this class of board. If touch doesn't register at all
    once wired up, revisit this assumption first.
+9. **The actual crash** (still present after #7): `Guru Meditation Error:
+   Core 1 panic'ed (LoadProhibited)`, 100% reproducible every boot,
+   `EXCVADDR` a tiny offset (`0x98`/`0xa8`) — and notably, `timemore_dot`'s
+   very first log line never printed, meaning it crashes inside
+   `NimBLEDevice::init()` before returning, not in any of this component's
+   own code. Traced via the backtrace addresses' pattern (not a symbolized
+   trace — no ELF available here) to almost certainly the same failure as
+   [h2zero/esp-nimble-cpp#113](https://github.com/h2zero/esp-nimble-cpp/issues/113),
+   which has the **identical** `EXCVADDR: 0x000000a8` crashing in
+   `nimble_port_run`/`NimBLEDevice::host_task`, caused by
+   `esp_bt_controller_init()` failing. This component starts BLE right
+   after wifi (`AFTER_WIFI` priority) while wifi is still actively
+   scanning/connecting on the same 2.4GHz radio, and nothing in this
+   config was telling ESP-IDF that wifi and BT need to coexist on that
+   shared radio — only `esp32_ble`'s own `to_code()` normally calls
+   `esp32.request_software_coexistence()`, and this component deliberately
+   doesn't use `esp32_ble`. Added that call to
+   `components/timemore_dot/__init__.py`. **Not yet confirmed this fixes
+   it** — if the identical crash recurs after this, the next thing to try
+   is delaying `NimBLEDevice::init()` until wifi has actually finished
+   connecting (`wifi::global_wifi_component->is_connected()`), not just
+   finished its own `setup()` — the crash happens while
+   `[D][wifi:1334]: Starting scan` is still active, so "wifi setup done"
+   and "radio actually free" may not be the same moment.
 
 The code for all of the following now exists, and it's now been through a
 real boot (see milestone above) — when you build next, verify in this

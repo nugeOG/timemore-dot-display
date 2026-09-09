@@ -1,5 +1,9 @@
 import esphome.codegen as cg
-from esphome.components.esp32 import add_idf_sdkconfig_option, request_bluetooth
+from esphome.components.esp32 import (
+    add_idf_sdkconfig_option,
+    request_bluetooth,
+    request_software_coexistence,
+)
 import esphome.config_validation as cv
 from esphome.const import CONF_ID
 
@@ -49,3 +53,18 @@ async def to_code(config):
     # against esp-idf v5.5.5's components/bt/Kconfig `choice BT_HOST` block.
     request_bluetooth()
     add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_ENABLED", True)
+
+    # A real boot crashed 100% reproducibly inside NimBLE's own host task
+    # (nimble_port_run, called from NimBLEDevice::host_task) with the exact
+    # same fault address (EXCVADDR 0xa8) as a known esp-nimble-cpp issue
+    # caused by esp_bt_controller_init() failing -- see
+    # https://github.com/h2zero/esp-nimble-cpp/issues/113. This component
+    # starts BLE right after wifi (AFTER_WIFI priority) while wifi is still
+    # actively scanning/connecting on the same radio; nothing in this
+    # config was telling ESP-IDF that wifi and BT need to coexist on that
+    # shared radio, since only esp32_ble's own to_code() normally calls
+    # this (and we deliberately don't use esp32_ble). Untested whether this
+    # alone fixes it -- if the same crash recurs, the next thing to try is
+    # delaying NimBLEDevice::init() until wifi has actually finished
+    # connecting, not just finished its own setup().
+    request_software_coexistence()
