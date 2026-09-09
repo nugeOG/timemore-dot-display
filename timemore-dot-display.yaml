@@ -190,7 +190,7 @@ touchscreen:
 # external_components:
 #   - source: github://nugeOG/timemore-dot-display@main
 #     components: [timemore_dot]
-#     refresh: 1h
+#     refresh: always
 #
 # timemore_dot:
 #   id: dot_scale
@@ -269,4 +269,4 @@ packages:
     url: https://github.com/nugeOG/timemore-dot-display
     files: [scale-display-lvgl.yaml]
     ref: main
-    refresh: 1h
+    refresh: always
