@@ -112,13 +112,9 @@ display:
     spi_id: tft_spi
     cs_pin: GPIO15
     dc_pin: GPIO2
-    # This panel's native controller orientation is portrait (240x320) --
-    # a real boot photo showed the board itself is physically landscape
-    # (cable at top, wider than tall) with content rendering sideways at
-    # rotation: 0. 90 is a first guess to correct that; if the result reads
-    # upside-down or mirrored, try 270 instead -- the two are easy to
-    # confuse without seeing the actual panel.
-    rotation: 90
+    # Rotation lives under lvgl: instead (scale-display-lvgl.yaml) when
+    # LVGL is in use -- ESPHome rejects it here: "use of 'rotation' in the
+    # display config is not compatible with LVGL".
     # Became a required option (no default) in a newer ESPHome release than
     # this was originally written against. `false` is the common default
     # for this panel, but it's a real per-panel property, not a placeholder

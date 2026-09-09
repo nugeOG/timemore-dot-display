@@ -224,6 +224,14 @@ lvgl:
   # than cleanly falling back to a smaller buffer. 25% is ESPHome's own
   # documented recommendation for PSRAM-less boards.
   buffer_size: 25%
+  # This panel's native controller orientation is portrait (240x320) -- a
+  # real boot photo showed the board itself is physically landscape
+  # (cable at top, wider than tall) with content rendering sideways at
+  # rotation 0. 90 is a first guess to correct that; if the result reads
+  # upside-down or mirrored, try 270 instead -- the two are easy to
+  # confuse without seeing the actual panel. Belongs here under lvgl:, not
+  # under display:, when LVGL is in use -- ESPHome rejects the latter.
+  rotation: 90
   displays:
     - main_lcd
   touchscreens:
