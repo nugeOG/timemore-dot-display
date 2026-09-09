@@ -64,11 +64,12 @@ api:
 
 ota:
   - platform: esphome
-    # A bare `encryption:` block (no key) inherits the api: encryption key
-    # above instead of a separate password -- a plaintext password is
-    # redundant once uploads already require that key, and costs extra
-    # flash/RAM to boot.
-    encryption:
+    # NOTE: ESPHome's `dev` branch supports a bare `encryption:` block here
+    # that inherits the api: key above instead of a separate password
+    # (avoids one secret and some flash/RAM) -- but that hasn't shipped in
+    # a numbered release yet as of 2026.8.2, so back to a plain password
+    # for now. Worth switching once it's actually released.
+    password: !secret ota_password
 
 # Uncomment for non-Home-Assistant consumers. Requires an MQTT broker
 # reachable from this device's wifi network (e.g. Mosquitto).

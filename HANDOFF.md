@@ -106,6 +106,17 @@ Reconnection uses the same `marked_for_reconnect_` pattern named in the
 original build/test-order note below, polled from `loop()` on a 5s backoff
 rather than acted on inline from a BLE callback.
 
+**Build status as of this writing**: actively being test-built via the
+Home Assistant ESPHome add-on, running **ESPHome 2026.8.2**. Config
+validation errors found so far (`invert_colors` required on `display.ili9xxx`,
+`touchscreen.calibration` needing a nested block, `ota.esphome`'s
+`encryption:` option not existing on this release — that one only exists
+on ESPHome's unreleased `dev` branch, a mistake made while fixing the
+first two) have been fixed in `timemore-dot-display.yaml`. **When
+verifying anything else against ESPHome's source, check the tag matching
+the installed version (`2026.8.2`), not the `dev` branch** — the two can
+disagree on what's actually valid config.
+
 The code for all of the following now exists, but none of it has been
 exercised on hardware — when you actually build, verify in this order
 (test the riskiest part first) rather than assuming a clean build means
@@ -251,7 +262,6 @@ ESPHome config):
   `__init__.py`, `sensor.py`, `binary_sensor.py`, `button.py`,
   `timemore_dot.h`, `timemore_dot.cpp`.
 - `secrets.yaml.example` — template for the `secrets.yaml` the ESPHome
-  add-on expects (wifi credentials, API encryption key -- also used to
-  authenticate OTA updates, no separate OTA password).
+  add-on expects (wifi credentials, API encryption key, OTA password).
 - `.gitignore` — excludes `secrets.yaml`, the `.esphome/` build cache, and
   `*.bin` build artifacts.
