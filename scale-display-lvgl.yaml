@@ -165,7 +165,10 @@ interval:
 script:
   - id: do_tare
     then:
-      - button.press: tare_button
+      # TEMPORARY: tare_button doesn't exist while timemore_dot is disabled
+      # for crash bisection (see timemore-dot-display.yaml) -- revert this
+      # alongside that.
+      - lambda: 'ESP_LOGD("ui", "Tare requested (button.press disabled during crash bisection)");'
       # Suppress auto-stop false triggers for 1.5s after a manual tare —
       # a tare causes an instant weight drop that otherwise looks like
       # "cup removed" to the auto-timer logic.
