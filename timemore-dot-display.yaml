@@ -137,7 +137,17 @@ touchscreen:
   id: main_touch
   spi_id: touch_spi
   cs_pin: GPIO33
-  interrupt_pin: GPIO36
+  # GPIO36 is one of the ESP32's input-only pins (34-39) -- no internal
+  # pull resistor hardware exists on those at all, so requesting one (the
+  # implicit default for an interrupt pin) logs a harmless but noisy
+  # `gpio_pullup_en` error every boot. Disabled explicitly here; relies on
+  # the touch panel having its own external pull-up on T_IRQ, which is
+  # standard on this class of board -- if touch input doesn't register at
+  # all once wired up, this assumption is the first thing to revisit.
+  interrupt_pin:
+    number: GPIO36
+    mode:
+      input: true
   update_interval: 50ms
   # Run through the touchscreen calibration process and paste the reported
   # values here before relying on touch accuracy — these are uncalibrated

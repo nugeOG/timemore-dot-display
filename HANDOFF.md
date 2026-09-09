@@ -150,10 +150,35 @@ and fixed so far, in order:
    flow labels were already fine since they go through `str_sprintf()`,
    which does return `std::string`.
 
-The code for all of the following now exists, but none of it has been
-exercised on hardware — when you actually build, verify in this order
-(test the riskiest part first) rather than assuming a clean build means
-it all works:
+**Milestone: it compiled, flashed, and booted on the real board.** First
+real boot log obtained via OTA logs, screen stayed blank. Two issues found
+from that log, both fixed (unverified until the next flash):
+7. `[W][lvgl:998]: Failed to allocate 153600 bytes for draw buffer`,
+   followed shortly after by a `Guru Meditation Error: ... (LoadProhibited)`
+   crash-and-reboot loop (10 attempts, then ESPHome's safe-mode kicked in).
+   This board has no PSRAM configured, so LVGL's default 100%-of-screen
+   draw buffer (153,600 bytes = 240×320×2) doesn't fit in whatever's left
+   of internal RAM once wifi/BLE have claimed their share — and rather
+   than cleanly falling back to a smaller buffer, something dereferenced
+   the failed allocation (the crash addresses, tiny offsets like `0x98`/
+   `0xa8`, look exactly like a null-pointer struct access). Set
+   `buffer_size: 25%` in `scale-display-lvgl.yaml`'s `lvgl:` block —
+   ESPHome's own documented recommendation for PSRAM-less boards.
+8. `E (472) gpio: gpio_pullup_en(...): GPIO number error (input-only pad
+   has no internal PU)`, logged once per boot right before "Attach Touch
+   Interrupt". GPIO36 (the touchscreen `interrupt_pin` guess) is one of
+   the ESP32's input-only pins (34-39), which have no internal pull
+   resistor hardware at all — requesting one fails. Non-fatal (boot
+   continued past it), but fixed anyway: `interrupt_pin` now sets
+   `mode: {input: true}` explicitly (no pullup requested), relying on the
+   touch panel having its own external pull-up on T_IRQ, which is
+   standard for this class of board. If touch doesn't register at all
+   once wired up, revisit this assumption first.
+
+The code for all of the following now exists, and it's now been through a
+real boot (see milestone above) — when you build next, verify in this
+order (test the riskiest part first) rather than assuming a clean build
+means it all works:
 1. Bonding — does `secureConnection()` actually succeed on this board's
    NimBLE stack at all? Everything downstream depends on this. Watch the
    logs (`logger:` is enabled) for "Bonding/secure connection ... failed".

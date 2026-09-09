@@ -209,6 +209,13 @@ script:
 # Screen layout — target resolution 240x320 portrait
 # ----------------------------------------------------------------------------
 lvgl:
+  # This board has no PSRAM configured, so a full-screen (100%, the
+  # default) 153600-byte draw buffer doesn't fit in internal RAM once
+  # wifi/BLE have claimed their share -- a real boot log showed it fail
+  # to allocate and then crash (LoadProhibited) shortly after, rather
+  # than cleanly falling back to a smaller buffer. 25% is ESPHome's own
+  # documented recommendation for PSRAM-less boards.
+  buffer_size: 25%
   displays:
     - main_lcd
   touchscreens:
