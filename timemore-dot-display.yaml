@@ -108,36 +108,31 @@ spi:
 display:
   - platform: ili9xxx
     id: main_lcd
-    model: ILI9341
+    # Manually combining model: ILI9341 with dimensions: {320,240} +
+    # transform: swap_xy: true (previous attempt) produced a corrupted,
+    # increasingly-garbled render (a real photo showed the status row
+    # near the origin rendering fine, then progressively worse toward
+    # the middle/bottom, still with an untouched region at the end) --
+    # consistent with an addressing/stride mismatch from combining those
+    # primitives in a way that isn't how they're meant to be used
+    # together for this chip. ESPHome ships a purpose-built model for
+    # exactly this "ILI9341 chipset, landscape-native panel" case instead
+    # of composing the transform by hand: ILI9XXXILI9342 (same command
+    # set as ILI9341 -- INITCMD_ILI9341 -- constructed with width=320,
+    # height=240 directly, no swap_xy/dimensions override needed). The
+    # board's silkscreen reads "TPM408-2.8"; a community TFT_eSPI config
+    # for that exact board (same SPI/CS/DC/backlight pins as below,
+    # confirming the board-family match) declares TFT_WIDTH 320/
+    # TFT_HEIGHT 240 and TFT_RGB_ORDER TFT_RGB, which is what led here.
+    model: ILI9342
     spi_id: tft_spi
     cs_pin: GPIO15
     dc_pin: GPIO2
-    # The board's silkscreen reads "TPM408-2.8" -- a specific CYD variant.
-    # Found a community TFT_eSPI config for that exact board (same SPI/CS/
-    # DC/backlight pins as below, confirming this is the right board
-    # family): it declares TFT_WIDTH 320 / TFT_HEIGHT 240 (native
-    # landscape, not portrait-plus-rotation) and TFT_RGB_ORDER TFT_RGB.
-    # This is the real fix for the static/uncovered-screen-area bug: the
-    # driver's default dimensions (240x320, from the ILI9341 model) never
-    # matched the panel's actual native shape, and LVGL's `rotation:` was
-    # always going through a *software* rotation path on top of that
-    # mismatch -- ili9xxx never declares hardware-rotation support, so it
-    # was rotating an already-wrong-shaped buffer rather than fixing the
-    # real problem. Explicit dimensions replace that.
-    dimensions:
-      width: 320
-      height: 240
     color_order: RGB
-    # swap_xy here is the display-level, MADCTL/hardware equivalent of
-    # rotation -- mutually exclusive with `rotation:`, which is why LVGL's
-    # rotation (previously in scale-display-lvgl.yaml) is removed now that
-    # this handles orientation at the source. Still a guess for the exact
-    # mirror_x/mirror_y combination -- the TFT_eSPI reference didn't cover
-    # this (that's a different library's own MADCTL computation), so if
-    # the image is now correctly sized but flipped/mirrored, add
-    # mirror_x: true and/or mirror_y: true here next.
-    transform:
-      swap_xy: true
+    # If the image now fills the whole screen without corruption but
+    # reads upside-down or mirrored, that's a much simpler follow-up:
+    # add a transform: {mirror_x: true} and/or {mirror_y: true} block
+    # here (still untested which, if any, this panel needs).
     # Became a required option (no default) in a newer ESPHome release than
     # this was originally written against. `false` is the common default
     # for this panel, but it's a real per-panel property, not a placeholder

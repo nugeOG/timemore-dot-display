@@ -264,28 +264,42 @@ layout, so content appeared sideways. This went through a few iterations:
    (portrait) dimensions — which never matched this panel's true native
    320×240 (landscape) shape in the first place. Rotating the wrong-sized
    buffer explains the never-covered static region.
-3. Fixed at the source instead: `display.ili9xxx` now sets
-   `dimensions: {width: 320, height: 240}`, `color_order: RGB` (was
-   defaulting to BGR — also wrong per the same TFT_eSPI reference), and
+3. First fix attempt: kept `model: ILI9341` and manually added
+   `dimensions: {width: 320, height: 240}` + `color_order: RGB` (was
+   defaulting to BGR — also wrong per the same TFT_eSPI reference) +
    `transform: swap_xy: true` (the display-level, MADCTL-based hardware
-   equivalent of rotation, mutually exclusive with `rotation:`). LVGL's
-   own `rotation:` was removed entirely now that the driver reports
-   correct native dimensions/orientation directly.
-4. Added a `touchscreen.transform: swap_xy: true` guess separately, since
+   equivalent of rotation). **Made it worse, not better** — a real photo
+   showed the status row near the origin rendering fine, then
+   progressively more corrupted/melted-looking toward the middle and
+   bottom, with the bottom region still completely untouched (static).
+   Consistent with an addressing/stride mismatch from combining
+   `dimensions:` and `swap_xy` in a way this chip doesn't expect them
+   used together, even though each individually is documented/valid.
+4. Real fix: `ili9xxx` ships a model built for exactly this situation --
+   `ILI9XXXILI9342`, same command set as ILI9341
+   (`INITCMD_ILI9341`) but constructed with `width=320, height=240`
+   directly baked in, no `swap_xy`/`dimensions` override needed. Switched
+   `model: ILI9341` → `model: ILI9342`, dropped the manual `dimensions:`/
+   `transform:` from step 3 entirely, kept `color_order: RGB`. Not yet
+   confirmed on real hardware — this is a much more likely-correct
+   approach than composing the primitives by hand (it's what the model
+   class exists for), but "likely correct" isn't "confirmed."
+5. Added a `touchscreen.transform: swap_xy: true` guess separately, since
    raw touch coordinates come from the panel's fixed physical wiring
    independent of the display driver's own transform, and likely need
-   realigning to match. Still unconfirmed.
-5. Rewrote `scale-display-lvgl.yaml`'s entire widget layout for a native
+   realigning to match. Still unconfirmed, and now the SPI/GRAM
+   corruption is out of the way, worth re-checking once the display
+   itself renders cleanly.
+6. Rewrote `scale-display-lvgl.yaml`'s entire widget layout for a native
    320×240 canvas (not a rotated copy of the old portrait layout): status
    row across the top, weight+flow in a left column, timer+mode in a
    right column, all four buttons along the bottom.
 
-**None of step 3's `mirror_x`/`mirror_y` values have been confirmed** —
-the TFT_eSPI reference in open item #1 only covers `swap_xy`-equivalent
-dimensions/orientation, not the specific mirror bits this panel needs; if
-the image is now correctly *sized* (fills the whole screen, no static)
-but flipped/mirrored, add `mirror_x: true` and/or `mirror_y: true` next to
-`swap_xy: true` under the same `transform:` block.
+**If the image now fills the whole screen without corruption but reads
+upside-down or mirrored**, that's a much simpler follow-up than what got
+us here: add a `transform: {mirror_x: true}` and/or `{mirror_y: true}`
+block to the `display.ili9xxx` config — still untested which, if any,
+this panel needs.
 
 ## Auto-timer logic (not scale-dependent — computed entirely on-device)
 
@@ -369,12 +383,13 @@ ESPHome config):
    guess was right — but it declares `TFT_WIDTH 320` / `TFT_HEIGHT 240`
    (native landscape) and `TFT_RGB_ORDER TFT_RGB`, neither of which
    matched this project's original config (which assumed 240x320 portrait
-   + BGR). Fixed via explicit `dimensions:`/`color_order: RGB`/
-   `transform: swap_xy: true` on the `display:` block — still not
-   confirmed by an actual clean render (the `mirror_x`/`mirror_y` half of
-   the transform is an unverified guess; that source didn't cover touch
+   + BGR). Fixed via `model: ILI9342` (a landscape-native ILI9341-chipset
+   model ESPHome ships specifically for this) + `color_order: RGB` on the
+   `display:` block — see "Screen orientation" below for the full trail,
+   including a first attempt that made things worse. Still not confirmed
+   by an actual clean render; that TFT_eSPI source didn't cover touch
    wiring at all, so the XPT2046 pins remain a separate, still-unconfirmed
-   guess).
+   guess.
 2. ~~Icon font~~ **Resolved**: fonts are now pulled at build time via
    `gfonts://` (Inter for text, Google's Material Symbols Outlined for
    icons — see `scale-display-lvgl.yaml`'s `font:` block) rather than
