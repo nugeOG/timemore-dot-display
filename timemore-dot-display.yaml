@@ -112,7 +112,13 @@ display:
     spi_id: tft_spi
     cs_pin: GPIO15
     dc_pin: GPIO2
-    rotation: 0
+    # This panel's native controller orientation is portrait (240x320) --
+    # a real boot photo showed the board itself is physically landscape
+    # (cable at top, wider than tall) with content rendering sideways at
+    # rotation: 0. 90 is a first guess to correct that; if the result reads
+    # upside-down or mirrored, try 270 instead -- the two are easy to
+    # confuse without seeing the actual panel.
+    rotation: 90
     # Became a required option (no default) in a newer ESPHome release than
     # this was originally written against. `false` is the common default
     # for this panel, but it's a real per-panel property, not a placeholder
@@ -151,27 +157,35 @@ touchscreen:
   update_interval: 50ms
   # Run through the touchscreen calibration process and paste the reported
   # values here before relying on touch accuracy — these are uncalibrated
-  # placeholders. If touch ends up mirrored or rotated relative to the
-  # screen once you can actually test it, add a `transform:` block here
-  # (swap_xy / mirror_x / mirror_y) -- not something that can be predicted
-  # without seeing it happen.
+  # placeholders.
   calibration:
     x_min: 0
     x_max: 4095
     y_min: 0
     y_max: 4095
+  # Raw touch coordinates come from the panel's fixed physical wiring,
+  # independent of the display's `rotation:` above -- since that's now 90
+  # (landscape) instead of 0, touch almost certainly needs an axis swap to
+  # line up with what's drawn on screen. This is a guess, genuinely
+  # untestable without touching the real screen and watching where the
+  # touch point actually registers -- try toggling swap_xy/mirror_x/
+  # mirror_y here if touches land in the wrong place once the layout
+  # itself is confirmed correct.
+  transform:
+    swap_xy: true
 
 # ----------------------------------------------------------------------
 # BLE scale component + entities
 # ----------------------------------------------------------------------
-# TEMPORARILY DISABLED for crash bisection -- a real boot crashes 100%
-# reproducibly right after api's setup(), and diagnostic logging added to
-# TimemoreDot::setup() never printed at all, meaning the crash is NOT in
-# this component. This whole block is commented out so the next build
-# either confirms that (still crashes -> not this component's fault) or
-# contradicts it (boots clean -> was this component after all, despite
-# the log evidence). Uncomment everything below once that's settled --
-# see HANDOFF.md for the full trail.
+# TEMPORARILY DISABLED -- the crash bisection test (removing this block
+# entirely) booted clean with no crash, confirming the boot crash IS tied
+# to this component after all. The earlier "diagnostic logging never
+# printed" result that seemed to rule it out was almost certainly a stale
+# build: the git refresh caching (`refresh: 1h`) bit us more than once
+# during this investigation, so that test may never have actually run the
+# instrumented code. Re-enable once the underlying NimBLE/esp-nimble-cpp
+# init crash itself is fixed -- see HANDOFF.md for the full trail and
+# next steps. Left in place as comments for an easy revert.
 #
 # external_components:
 #   - source: github://nugeOG/timemore-dot-display@main

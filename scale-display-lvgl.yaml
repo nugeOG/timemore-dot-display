@@ -209,7 +209,12 @@ script:
           text: !lambda 'return std::string(id(brew_mode_espresso) ? "\U0000EB44" : "\U0000EFEF");'
 
 # ----------------------------------------------------------------------------
-# Screen layout — target resolution 240x320 portrait
+# Screen layout — native landscape, 320x240 (see `rotation:` in
+# timemore-dot-display.yaml's display: block, which is what actually turns
+# the panel's physical output landscape -- this file lays out widgets
+# assuming that's already in effect, not just a portrait design rotated).
+# Not yet visually confirmed correct -- verify against the real screen and
+# nudge x/y values as needed once you can see it.
 # ----------------------------------------------------------------------------
 lvgl:
   # This board has no PSRAM configured, so a full-screen (100%, the
@@ -229,25 +234,25 @@ lvgl:
       bg_color: 0x0B0F0E
       widgets:
 
-        # ---- status row ----
+        # ---- status row (full width, y 4-30) ----
         - label:
             id: lbl_time
             x: 8
-            y: 8
+            y: 4
             text_font: font_time
             text_color: 0xF2F2EF
             text: "--:--"
         - label:
             id: lbl_date
             x: 8
-            y: 30
+            y: 24
             text_font: font_small
             text_color: 0x7A7A76
             text: "----"
         - label:
             id: lbl_wifi_icon
-            x: 148
-            y: 10
+            x: 198
+            y: 6
             text_font: font_icons
             text_color: 0x5DCAA5
             text: "\U0000E63E"
@@ -256,56 +261,54 @@ lvgl:
             # isn't up yet at boot. Swapped to bluetooth_connected/bright
             # by ble_connected's on_state trigger in timemore-dot-display.yaml.
             id: lbl_bt_icon
-            x: 176
-            y: 10
+            x: 224
+            y: 6
             text_font: font_icons
             text_color: 0x7A7A76
             text: "\U0000E1A9"
         - label:
             id: lbl_battery_pct
-            x: 198
-            y: 12
+            x: 250
+            y: 8
             text_font: font_small
             text_color: 0xC9C9C4
             text: "--%"
         - label:
             id: lbl_battery_icon
-            x: 222
-            y: 10
+            x: 284
+            y: 6
             text_font: font_icons
             text_color: 0xC9C9C4
             text: "\U0000E1A5"
 
-        # ---- weight ----
+        # ---- weight + flow, left column (y 40-160, x 8-175) ----
         - label:
             id: lbl_weight
-            align: TOP_MID
-            y: 88
+            x: 8
+            y: 46
             text_font: font_weight
             text_color: 0xF2F2EF
             text: "0.0"
         - label:
             id: lbl_flow_icon
-            align: TOP_MID
-            y: 160
-            x: -28
+            x: 8
+            y: 130
             text_font: font_icons
             text_color: 0x7A7A76
             text: "\U0000E798"
         - label:
             id: lbl_flow
-            align: TOP_MID
-            y: 160
-            x: 4
+            x: 32
+            y: 130
             text_font: font_small
             text_color: 0x7A7A76
             text: "0.0 g/s"
 
-        # ---- timer ----
+        # ---- timer + mode, right column (y 46-140, x 185-312) ----
         - label:
             id: lbl_timer
-            align: TOP_MID
-            y: 192
+            x: 185
+            y: 50
             text_font: font_timer
             text_color: 0xF2F2EF
             text: "00:00"
@@ -315,26 +318,25 @@ lvgl:
         # against real rendering.
         - label:
             id: lbl_auto_badge
-            align: TOP_MID
-            x: 54
-            y: 198
+            x: 270
+            y: 58
             text_font: font_small
             text_color: 0x5DCAA5
             text: "AUTO"
             hidden: true
         - label:
             id: lbl_mode
-            align: TOP_MID
-            y: 230
+            x: 185
+            y: 95
             text_font: font_small
             text_color: 0x7A7A76
             text: "Pour-over mode"
 
-        # ---- button row (y baseline ~254, screen bottom margin 20px) ----
+        # ---- button row, bottom (y 176-230, spans full width) ----
         - button:
             id: btn_tare
-            x: 8
-            y: 254
+            x: 20
+            y: 180
             width: 46
             height: 46
             radius: 23
@@ -350,8 +352,8 @@ lvgl:
 
         - button:
             id: btn_playpause
-            x: 64
-            y: 246
+            x: 93
+            y: 176
             width: 54
             height: 54
             radius: 27
@@ -372,8 +374,8 @@ lvgl:
         # child widgets.
         - arc:
             id: arc_reset
-            x: 124
-            y: 250
+            x: 174
+            y: 176
             width: 54
             height: 54
             min_value: 0
@@ -387,8 +389,8 @@ lvgl:
               arc_color: 0xF09595
         - button:
             id: btn_reset
-            x: 130
-            y: 256
+            x: 180
+            y: 182
             width: 42
             height: 42
             radius: 21
@@ -413,8 +415,8 @@ lvgl:
 
         - button:
             id: btn_mode
-            x: 186
-            y: 254
+            x: 255
+            y: 180
             width: 46
             height: 46
             radius: 23

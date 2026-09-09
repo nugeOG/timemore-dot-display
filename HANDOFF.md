@@ -208,11 +208,33 @@ from that log, both fixed (unverified until the next flash):
     component at all and every theory above is wrong; if entry logs but
     `init()` never returns, the crash is inside NimBLE's own init
     sequence as suspected, just not fixed by coexistence alone.
+11. **Neither log line appeared** in the next boot log either — same
+    conclusion as before, crash not reached this component at all, or so
+    it seemed. To get a clean answer, ran an actual bisection instead of
+    reasoning from log silence: commented out `timemore_dot:` and its
+    three `platform: timemore_dot` entries entirely
+    (`timemore-dot-display.yaml`) and rebuilt. **This booted clean — no
+    crash, `setup() finished successfully!`, wifi connected, touch
+    events registering.** This flips the earlier conclusion: the crash
+    IS tied to `timemore_dot` after all. Almost certainly, the
+    coexistence-fix and instrumented-logging builds were never actually
+    testing the code they claimed to -- this whole investigation kept
+    tripping on the same `refresh: 1h` git-cache staleness documented
+    elsewhere in this doc (rebuilding without first bumping to
+    `refresh: always` silently re-tests old component code). **The
+    `timemore_dot` block is currently commented out in
+    `timemore-dot-display.yaml`** (with `do_tare`'s `button.press` also
+    stubbed to a log line in `scale-display-lvgl.yaml`, since
+    `tare_button` doesn't exist while it's disabled) — re-enable both,
+    make certain `refresh: always` is set before that specific rebuild,
+    and pick the NimBLE crash investigation back up from the
+    coexistence-fix step (already applied, but never actually proven
+    either way).
 
 The code for all of the following now exists, and it's now been through a
-real boot (see milestone above) — when you build next, verify in this
-order (test the riskiest part first) rather than assuming a clean build
-means it all works:
+real boot (see milestone above) — when you re-enable `timemore_dot` and
+build next, verify in this order (test the riskiest part first) rather
+than assuming a clean build means it all works:
 1. Bonding — does `secureConnection()` actually succeed on this board's
    NimBLE stack at all? Everything downstream depends on this. Watch the
    logs (`logger:` is enabled) for "Bonding/secure connection ... failed".
@@ -222,6 +244,27 @@ means it all works:
    entity) actually zero the scale?
 4. Reconnection — pull the scale out of range or power-cycle it; does the
    scale entity reconnect on its own within a few reconnect-backoff cycles?
+
+## Screen orientation — corrected to native landscape
+
+A real boot photo showed the physical board is landscape-shaped (cable at
+top, wider than tall), but the firmware was rendering a 240×320 portrait
+layout, so content appeared sideways. Fixed:
+- `display.rotation` in `timemore-dot-display.yaml` changed from `0` to
+  `90` (a first guess — if the result reads upside-down or mirrored, try
+  `270` instead; the two are easy to confuse without seeing the real
+  panel).
+- Added a `touchscreen.transform: swap_xy: true` guess, since raw touch
+  coordinates come from the panel's fixed physical wiring independent of
+  the display's software rotation, and now need to be realigned to match.
+  Also a guess — genuinely can't be verified without touching the real
+  screen and checking where the touch point registers.
+- Rewrote `scale-display-lvgl.yaml`'s entire widget layout for a native
+  320×240 canvas (not a rotated copy of the old portrait layout): status
+  row across the top, weight+flow in a left column, timer+mode in a right
+  column, all four buttons along the bottom. None of these coordinates
+  have been visually confirmed — expect to nudge x/y values once you can
+  see the actual screen.
 
 ## Auto-timer logic (not scale-dependent — computed entirely on-device)
 
