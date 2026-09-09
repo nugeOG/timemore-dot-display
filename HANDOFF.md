@@ -287,19 +287,29 @@ layout, so content appeared sideways. This went through a few iterations:
 5. Added a `touchscreen.transform: swap_xy: true` guess separately, since
    raw touch coordinates come from the panel's fixed physical wiring
    independent of the display driver's own transform, and likely need
-   realigning to match. Still unconfirmed, and now the SPI/GRAM
-   corruption is out of the way, worth re-checking once the display
-   itself renders cleanly.
+   realigning to match.
 6. Rewrote `scale-display-lvgl.yaml`'s entire widget layout for a native
    320×240 canvas (not a rotated copy of the old portrait layout): status
    row across the top, weight+flow in a left column, timer+mode in a
    right column, all four buttons along the bottom.
 
-**If the image now fills the whole screen without corruption but reads
-upside-down or mirrored**, that's a much simpler follow-up than what got
-us here: add a `transform: {mirror_x: true}` and/or `{mirror_y: true}`
-block to the `display.ili9xxx` config — still untested which, if any,
-this panel needs.
+**Milestone: `model: ILI9342` confirmed correct by a real photo** — full
+screen, right-side up, layout matching the design exactly (status row top,
+weight/flow left, timer/mode right, four buttons along the bottom). The
+display side of this investigation is done.
+
+Touch is not yet fully aligned: `swap_xy: true` alone left touches
+**vertically mirrored** (touching near the top registered near the
+bottom) — confirmed by an actual touch test, not a guess. Added
+`mirror_y: true` alongside it. Still unconfirmed:
+- Whether `mirror_x` is also needed (a mirror on one axis doesn't imply
+  anything about the other) — test by tapping each of the four corners
+  and confirming all four register in roughly the right place, not just
+  checking that top/bottom feels right now.
+- The touchscreen `calibration:` block is still the full raw ADC range
+  (0-4095) placeholder — run ESPHome's calibration process once the axes
+  themselves are confirmed correct, since fixing swap/mirror first avoids
+  having to redo calibration if the axis mapping changes again.
 
 ## Auto-timer logic (not scale-dependent — computed entirely on-device)
 

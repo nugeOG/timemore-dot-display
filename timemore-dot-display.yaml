@@ -178,15 +178,17 @@ touchscreen:
     y_min: 0
     y_max: 4095
   # Raw touch coordinates come from the panel's fixed physical wiring,
-  # independent of the display's `rotation:` above -- since that's now 90
-  # (landscape) instead of 0, touch almost certainly needs an axis swap to
-  # line up with what's drawn on screen. This is a guess, genuinely
-  # untestable without touching the real screen and watching where the
-  # touch point actually registers -- try toggling swap_xy/mirror_x/
-  # mirror_y here if touches land in the wrong place once the layout
-  # itself is confirmed correct.
+  # independent of the display's own orientation (model: ILI9342 above) --
+  # swap_xy: true got the axes aligned correctly (confirmed: touch moves
+  # the right way left/right and up/down, not swapped/diagonal), but a
+  # real touch test showed the result was vertically mirrored (touching
+  # near the top registered near the bottom) -- added mirror_y: true to
+  # correct that. Still not confirmed there isn't also a horizontal
+  # mirror needed (mirror_x) -- untested until you can try tapping each
+  # of the four corners and confirm all four land correctly.
   transform:
     swap_xy: true
+    mirror_y: true
 
 # ----------------------------------------------------------------------
 # BLE scale component + entities
