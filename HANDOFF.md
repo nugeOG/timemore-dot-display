@@ -249,22 +249,43 @@ than assuming a clean build means it all works:
 
 A real boot photo showed the physical board is landscape-shaped (cable at
 top, wider than tall), but the firmware was rendering a 240×320 portrait
-layout, so content appeared sideways. Fixed:
-- `display.rotation` in `timemore-dot-display.yaml` changed from `0` to
-  `90` (a first guess — if the result reads upside-down or mirrored, try
-  `270` instead; the two are easy to confuse without seeing the real
-  panel).
-- Added a `touchscreen.transform: swap_xy: true` guess, since raw touch
-  coordinates come from the panel's fixed physical wiring independent of
-  the display's software rotation, and now need to be realigned to match.
-  Also a guess — genuinely can't be verified without touching the real
-  screen and checking where the touch point registers.
-- Rewrote `scale-display-lvgl.yaml`'s entire widget layout for a native
-  320×240 canvas (not a rotated copy of the old portrait layout): status
-  row across the top, weight+flow in a left column, timer+mode in a right
-  column, all four buttons along the bottom. None of these coordinates
-  have been visually confirmed — expect to nudge x/y values once you can
-  see the actual screen.
+layout, so content appeared sideways. This went through a few iterations:
+
+1. First attempt: `display.rotation` (later moved to `lvgl.rotation`,
+   since ESPHome rejects `rotation:` on `display:` when LVGL is in use)
+   tried `90`, then `270` per direct feedback from the real screen — both
+   still wrong, and worse, a real photo showed a persistent static/noise
+   band covering part of the screen, meaning the drawable area never
+   covered the full physical panel.
+2. Root cause found once the board's silkscreen ("TPM408-2.8") was
+   actually read and looked up (see open item #1): `ili9xxx` never
+   declares hardware-rotation support, so LVGL's `rotation:` was always a
+   *software* transform applied on top of the driver's default 240×320
+   (portrait) dimensions — which never matched this panel's true native
+   320×240 (landscape) shape in the first place. Rotating the wrong-sized
+   buffer explains the never-covered static region.
+3. Fixed at the source instead: `display.ili9xxx` now sets
+   `dimensions: {width: 320, height: 240}`, `color_order: RGB` (was
+   defaulting to BGR — also wrong per the same TFT_eSPI reference), and
+   `transform: swap_xy: true` (the display-level, MADCTL-based hardware
+   equivalent of rotation, mutually exclusive with `rotation:`). LVGL's
+   own `rotation:` was removed entirely now that the driver reports
+   correct native dimensions/orientation directly.
+4. Added a `touchscreen.transform: swap_xy: true` guess separately, since
+   raw touch coordinates come from the panel's fixed physical wiring
+   independent of the display driver's own transform, and likely need
+   realigning to match. Still unconfirmed.
+5. Rewrote `scale-display-lvgl.yaml`'s entire widget layout for a native
+   320×240 canvas (not a rotated copy of the old portrait layout): status
+   row across the top, weight+flow in a left column, timer+mode in a
+   right column, all four buttons along the bottom.
+
+**None of step 3's `mirror_x`/`mirror_y` values have been confirmed** —
+the TFT_eSPI reference in open item #1 only covers `swap_xy`-equivalent
+dimensions/orientation, not the specific mirror bits this panel needs; if
+the image is now correctly *sized* (fills the whole screen, no static)
+but flipped/mirrored, add `mirror_x: true` and/or `mirror_y: true` next to
+`swap_xy: true` under the same `transform:` block.
 
 ## Auto-timer logic (not scale-dependent — computed entirely on-device)
 
@@ -338,15 +359,22 @@ ESPHome config):
 
 ## Open items / unverified — check these first in Claude Code
 
-1. **Exact display/touch driver and pinout** for the specific board
-   purchased — still not confirmed. `timemore-dot-display.yaml` currently
-   guesses the pinout for the commonly-sold "Cheap Yellow Display"
-   (ESP32-2432S028R, ILI9341 + resistive XPT2046) because the original
-   listing description matches that board's usual marketing copy closely —
-   but this is a guess based on how these boards are typically sold, not a
-   confirmed match to the actual unit. Confirm against the board's
-   silkscreen/schematic (or just attempt a build and see what doesn't
-   initialize) before trusting any pin number in that file.
+1. ~~Exact display/touch driver and pinout~~ **Mostly confirmed**: a real
+   boot photo showed the board's silkscreen reads "TPM408-2.8" — a
+   specific "Cheap Yellow Display" variant with its own community
+   troubleshooting repo
+   ([cosynuss999-max/Setup-for-TPM408-2.8-variant](https://github.com/cosynuss999-max/Setup-for-TPM408-2.8-variant)).
+   Its TFT_eSPI config uses the *exact same* SPI/CS/DC/backlight pins
+   already in `timemore-dot-display.yaml`, confirming the board-family
+   guess was right — but it declares `TFT_WIDTH 320` / `TFT_HEIGHT 240`
+   (native landscape) and `TFT_RGB_ORDER TFT_RGB`, neither of which
+   matched this project's original config (which assumed 240x320 portrait
+   + BGR). Fixed via explicit `dimensions:`/`color_order: RGB`/
+   `transform: swap_xy: true` on the `display:` block — still not
+   confirmed by an actual clean render (the `mirror_x`/`mirror_y` half of
+   the transform is an unverified guess; that source didn't cover touch
+   wiring at all, so the XPT2046 pins remain a separate, still-unconfirmed
+   guess).
 2. ~~Icon font~~ **Resolved**: fonts are now pulled at build time via
    `gfonts://` (Inter for text, Google's Material Symbols Outlined for
    icons — see `scale-display-lvgl.yaml`'s `font:` block) rather than

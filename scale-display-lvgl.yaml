@@ -224,15 +224,12 @@ lvgl:
   # than cleanly falling back to a smaller buffer. 25% is ESPHome's own
   # documented recommendation for PSRAM-less boards.
   buffer_size: 25%
-  # This panel's native controller orientation is portrait (240x320).
-  # rotation: 0 (original) and 90 (first attempt) are both confirmed wrong
-  # on real hardware -- 90 needed "another 90 degrees anti-clockwise" per
-  # direct observation of the physical screen. 270 is the next candidate;
-  # if it's STILL wrong, 180 is the only remaining option out of LVGL's
-  # four valid values (0/90/180/270), so between these two we're
-  # guaranteed to land on the right one. Belongs here under lvgl:, not
-  # under display:, when LVGL is in use -- ESPHome rejects the latter.
-  rotation: 270
+  # No `rotation:` here anymore -- orientation is now handled at the
+  # source, via `dimensions:`/`transform:` on the display.ili9xxx block
+  # in timemore-dot-display.yaml (see that file's comment for why: this
+  # driver's default 240x320 dimensions never matched the panel's real
+  # native 320x240 landscape shape, and LVGL rotation was a software
+  # patch on top of that mismatch rather than fixing it at the source).
   displays:
     - main_lcd
   touchscreens:
