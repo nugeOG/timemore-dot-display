@@ -47,10 +47,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## BLE stack — NimBLE-Arduino
+## BLE stack — esp-nimble-cpp
 
 The `timemore_dot` component is written against
-[h2zero/NimBLE-Arduino](https://github.com/h2zero/NimBLE-Arduino), pulled
+[h2zero/esp-nimble-cpp](https://github.com/h2zero/esp-nimble-cpp), pulled
 in automatically at build time (see `components/timemore_dot/__init__.py`).
 Not code copied into this repo, but the component wouldn't exist without
 it — credited here for that reason. Apache License 2.0.

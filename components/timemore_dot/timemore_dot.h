@@ -11,12 +11,14 @@
 // (MIT-licensed). That repo is the authoritative source for the protocol --
 // re-check it if anything here seems to not match your actual scale.
 //
-// NOT YET BUILT OR TESTED ON REAL HARDWARE. Written against the NimBLE-
-// Arduino ~1.4.x API surface (see __init__.py's pinned library version) --
-// verify class/method names (setScanCallbacks, secureConnection, the
-// subscribe() callback signature, writeValue's return type) against
-// whatever version actually gets pulled in when you build this, since
-// NimBLE-Arduino's API has changed across major versions.
+// Built against h2zero/esp-nimble-cpp (see __init__.py's pinned version) --
+// NOT NimBLE-Arduino, which doesn't compile under ESPHome's ESP-IDF-based
+// build even with framework: type: arduino (confirmed by a real build
+// attempt failing on a missing esp_bt.h; see __init__.py's comment for the
+// full story). Class/method names are API-compatible between the two for
+// everything used here, verified against esp-nimble-cpp 2.5.0's source at
+// the time of that switch -- if a future library bump breaks the build,
+// check esp-nimble-cpp's own migration guide, not NimBLE-Arduino's.
 // ============================================================================
 
 #include "esphome/core/component.h"
@@ -62,14 +64,14 @@ class TimemoreDot : public Component {
 
   // Called from the NimBLE scan/client callbacks defined in the .cpp --
   // public because those callback classes aren't members of TimemoreDot.
-  void on_scan_result(NimBLEAdvertisedDevice *device);
+  void on_scan_result(const NimBLEAdvertisedDevice *device);
   void on_connect();
   void on_disconnect();
   void on_notify(const uint8_t *data, size_t length);
 
  protected:
   void start_scan_();
-  void connect_(NimBLEAdvertisedDevice *device);
+  void connect_(const NimBLEAdvertisedDevice *device);
   bool write_frame_(const uint8_t *data, size_t length);
   void handle_frame_(const uint8_t *payload, size_t payload_len, uint8_t frame_class, uint8_t frame_type);
 

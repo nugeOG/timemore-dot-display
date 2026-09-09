@@ -74,18 +74,19 @@ if anything below seems to not match your actual scale.
 - **Decision: write a custom ESPHome external component that owns the BLE
   stack exclusively** (no `esp32_ble_tracker:`/`ble_client:` declared in
   YAML at all), porting the connect/handshake/decode logic from
-  `dot.cpp` directly against NimBLE-Arduino. ESPHome still handles Wi-Fi,
-  OTA, display driver, and LVGL as normal — only the scale connection is
-  hand-rolled.
+  `dot.cpp` directly against NimBLE's C++ wrapper API (h2zero/esp-nimble-cpp
+  -- see below for why that specific library, not NimBLE-Arduino despite
+  the similar name). ESPHome still handles Wi-Fi, OTA, display driver, and
+  LVGL as normal — only the scale connection is hand-rolled.
 
-## `timemore_dot` component — written, not yet built or tested
+## `timemore_dot` component — written, build in progress
 
 The custom ESPHome external component described above now exists at
 `components/timemore_dot/`:
 
 ```
 components/timemore_dot/
-├── __init__.py       # ESPHome component registration, pins NimBLE-Arduino 1.4.1
+├── __init__.py       # ESPHome component registration, pins esp-nimble-cpp 2.5.0
 ├── sensor.py          # exposes weight + battery_level as sensor: platform
 ├── binary_sensor.py   # exposes connected as binary_sensor: platform
 ├── button.py           # exposes tare as button: platform (TareButton)
@@ -94,28 +95,49 @@ components/timemore_dot/
 ```
 
 **Caveat that matters more than the others in this doc**: this code has
-never been compiled or run. It's a direct port of the connect → bond →
-subscribe → decode flow from the reference driver, using what I believe is
-the NimBLE-Arduino ~1.4.x API (`setScanCallbacks`, `secureConnection()`,
-the `subscribe()` lambda signature, `writeValue()`'s bool return). NimBLE-
-Arduino's API has shifted across major versions — if the build fails on
-these specific calls, that's the first thing to check, not a sign the
-overall approach (connect/bond/decode logic) is wrong.
+not been confirmed working end-to-end on real hardware yet (config
+validation and most compilation now pass -- see build status below). It's
+a direct port of the connect → bond → subscribe → decode flow from the
+reference driver, against h2zero/esp-nimble-cpp's C++ wrapper API
+(`setScanCallbacks`, `secureConnection()`, the `subscribe()` lambda
+signature, `writeValue()`'s bool return) — verified by reading
+esp-nimble-cpp 2.5.0's actual source, not just assumed. If a future
+library bump breaks the build on these specific calls, check
+esp-nimble-cpp's migration guide, not a sign the overall approach
+(connect/bond/decode logic) is wrong.
 
 Reconnection uses the same `marked_for_reconnect_` pattern named in the
 original build/test-order note below, polled from `loop()` on a 5s backoff
 rather than acted on inline from a BLE callback.
 
 **Build status as of this writing**: actively being test-built via the
-Home Assistant ESPHome add-on, running **ESPHome 2026.8.2**. Config
-validation errors found so far (`invert_colors` required on `display.ili9xxx`,
-`touchscreen.calibration` needing a nested block, `ota.esphome`'s
-`encryption:` option not existing on this release — that one only exists
-on ESPHome's unreleased `dev` branch, a mistake made while fixing the
-first two) have been fixed in `timemore-dot-display.yaml`. **When
-verifying anything else against ESPHome's source, check the tag matching
-the installed version (`2026.8.2`), not the `dev` branch** — the two can
-disagree on what's actually valid config.
+Home Assistant ESPHome add-on, running **ESPHome 2026.8.2**. Issues found
+and fixed so far, in order:
+1. `invert_colors` required on `display.ili9xxx` (no default on this
+   ESPHome version).
+2. `touchscreen.calibration` needing a nested block, not flat
+   `calibration_x_min`/etc. keys.
+3. `ota.esphome`'s `encryption:` option doesn't exist on 2026.8.2 (only on
+   ESPHome's unreleased `dev` branch) — reverted to `password:`. **Lesson:
+   when verifying anything against ESPHome's source, check the tag
+   matching the installed version, not `dev`** — they can disagree.
+4. `lbl_playpause_text` referenced by two LVGL scripts but never actually
+   defined as a widget — a leftover from the original handoff YAML, never
+   caught before a real build ran config validation on it. Removed.
+5. **The big one**: `h2zero/NimBLE-Arduino` (the originally-chosen library)
+   doesn't compile under ESPHome's build at all. Its own README says so
+   explicitly ("This repo will not compile correctly in ESP-IDF") --
+   ESPHome's `framework: type: arduino` still builds through ESP-IDF's
+   CMake/Kconfig system underneath, which isn't what NimBLE-Arduino
+   expects. A real build attempt got as far as actually compiling
+   NimBLE-Arduino's `.cpp` files before failing on a missing `esp_bt.h`,
+   which is what surfaced this. Switched to `h2zero/esp-nimble-cpp` (same
+   author, same API, built for exactly this ESP-IDF-based scenario) and
+   added the two `esp32.request_bluetooth()` /
+   `CONFIG_BT_NIMBLE_ENABLED` sdkconfig calls nothing else in this config
+   would otherwise trigger, since BLE is deliberately not requested via
+   `esp32_ble_tracker:`/`ble_client:`. See `components/timemore_dot/__init__.py`
+   for the full reasoning and source citations.
 
 The code for all of the following now exists, but none of it has been
 exercised on hardware — when you actually build, verify in this order
@@ -223,22 +245,19 @@ ESPHome config):
    against the real rendered icon. **This needs internet access at build
    time** to fetch fonts from Google's CDN — fine for the Home Assistant
    ESPHome add-on, but worth knowing if you ever build offline.
-3. **`lvgl.arc.update` action name** — used in the config to update the
-   reset-hold progress ring. Matches the general `lvgl.<widget>.update`
-   pattern seen in other ESPHome LVGL actions, but not fully confirmed for
-   the plain `arc` widget (as opposed to `meter` arc indicators, which
-   definitely changed between LVGL 8 and 9). Verify against current
-   ESPHome docs / by attempting a build.
-4. **`timemore_dot` external component** — written (`components/timemore_dot/`)
-   but **never compiled or run** — see the caveat under "`timemore_dot`
-   component" above. The NimBLE-Arduino ~1.4.x API surface it's written
-   against (`setScanCallbacks`, `secureConnection()`, the `subscribe()`
-   callback signature) is the most likely thing to need adjusting on a
-   real build.
-5. **Touchscreen calibration** — `calibration_x_min/max`/`y_min/max` in
-   `timemore-dot-display.yaml` are uncalibrated placeholders (full raw
-   ADC range). Run the touchscreen through ESPHome's calibration process
-   once it's flashed and paste the real values in.
+3. ~~`lvgl.arc.update` action name~~ **Resolved**: config validation now
+   passes clean on ESPHome 2026.8.2 (confirmed by an actual build reaching
+   the C++ compile stage), so this action name is correct as written.
+4. **`timemore_dot` external component** — written (`components/timemore_dot/`),
+   config-validates and compiles most of the way on a real build (see
+   "build status" above) but hasn't successfully linked/flashed yet as of
+   this writing. Uses `h2zero/esp-nimble-cpp`, not NimBLE-Arduino (see
+   above for why).
+5. **Touchscreen calibration** — the `calibration:` block in
+   `timemore-dot-display.yaml` (x_min/x_max/y_min/y_max) is an
+   uncalibrated placeholder (full raw ADC range). Run the touchscreen
+   through ESPHome's calibration process once it's flashed and paste the
+   real values in.
 6. Repo created: [github.com/nugeOG/timemore-dot-display](https://github.com/nugeOG/timemore-dot-display)
    (private).
 

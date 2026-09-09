@@ -31,7 +31,7 @@ class TimemoreDotClientCallbacks : public NimBLEClientCallbacks {
 class TimemoreDotScanCallbacks : public NimBLEScanCallbacks {
  public:
   explicit TimemoreDotScanCallbacks(TimemoreDot *parent) : parent_(parent) {}
-  void onResult(NimBLEAdvertisedDevice *device) override { parent_->on_scan_result(device); }
+  void onResult(const NimBLEAdvertisedDevice *device) override { parent_->on_scan_result(device); }
 
  protected:
   TimemoreDot *parent_;
@@ -69,7 +69,7 @@ void TimemoreDot::start_scan_() {
   scan->start(0 /* duration: scan until we stop it ourselves */, false);
 }
 
-void TimemoreDot::on_scan_result(NimBLEAdvertisedDevice *device) {
+void TimemoreDot::on_scan_result(const NimBLEAdvertisedDevice *device) {
   if (!device->haveName() || device->getName().rfind(DEVICE_NAME_PREFIX, 0) != 0)
     return;
 
@@ -79,7 +79,7 @@ void TimemoreDot::on_scan_result(NimBLEAdvertisedDevice *device) {
   connect_(device);
 }
 
-void TimemoreDot::connect_(NimBLEAdvertisedDevice *device) {
+void TimemoreDot::connect_(const NimBLEAdvertisedDevice *device) {
   target_address_ = device->getAddress().toString();
 
   if (client_ == nullptr) {

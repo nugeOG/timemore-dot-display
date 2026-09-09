@@ -1,4 +1,5 @@
 import esphome.codegen as cg
+from esphome.components.esp32 import add_idf_sdkconfig_option, request_bluetooth
 import esphome.config_validation as cv
 from esphome.const import CONF_ID
 
@@ -23,10 +24,28 @@ CONFIG_SCHEMA = cv.Schema(
 async def to_code(config):
     var = cg.new_Pvariable(config[CONF_ID])
     await cg.register_component(var, config)
-    # Pinned so behavior doesn't silently shift on a NimBLE-Arduino bump --
-    # the exact API surface used in timemore_dot.cpp/.h (setScanCallbacks,
-    # secureConnection, subscribe callback signature, etc.) was written
-    # against this version and has NOT been verified by an actual build,
-    # per HANDOFF.md. Re-check against NimBLE-Arduino's changelog if you
-    # bump this.
-    cg.add_library("h2zero/NimBLE-Arduino", "1.4.1")
+
+    # h2zero/NimBLE-Arduino (the Arduino-library variant) doesn't compile
+    # under ESPHome's build even with framework: type: arduino -- that
+    # framework setting still builds through ESP-IDF's CMake/Kconfig system
+    # underneath (confirmed by a real build: it got to actually compiling
+    # NimBLE-Arduino's .cpp files before failing on a missing esp_bt.h),
+    # and NimBLE-Arduino's own README says as much: "This repo will not
+    # compile correctly in ESP-IDF." h2zero/esp-nimble-cpp is the same
+    # author's ESP-IDF-native sibling library with the same class/method
+    # API (NimBLEDevice, NimBLEClient, NimBLEScan, subscribe(),
+    # secureConnection(), etc. all confirmed to match against esp-nimble-cpp
+    # 2.5.0's source) -- only real code-level difference found is
+    # NimBLEScanCallbacks::onResult taking a `const` pointer in 2.x, fixed
+    # in timemore_dot.h/.cpp.
+    cg.add_library("h2zero/esp-nimble-cpp", "2.5.0")
+
+    # Nothing else in this config requests Bluetooth (deliberately -- no
+    # esp32_ble_tracker/ble_client, see HANDOFF.md's architecture-decision
+    # section) so nothing else will enable it in sdkconfig either.
+    # request_bluetooth() sets CONFIG_BT_ENABLED; ESP-IDF's own Kconfig
+    # then defaults the Bluetooth host stack to Bluedroid unless something
+    # explicitly picks NimBLE instead, hence the second line -- verified
+    # against esp-idf v5.5.5's components/bt/Kconfig `choice BT_HOST` block.
+    request_bluetooth()
+    add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_ENABLED", True)
