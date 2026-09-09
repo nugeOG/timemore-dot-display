@@ -164,18 +164,22 @@ touchscreen:
 # ----------------------------------------------------------------------
 # BLE scale component + entities
 # ----------------------------------------------------------------------
-# Pulled directly from GitHub -- `refresh: 1h` means it re-checks for
-# updates once an hour rather than ESPHome's 1-day default, since this
-# project is still under active, untested development. Turn that down
-# (e.g. `refresh: 1d`, or `never` to pin) once it's stable and you'd
-# rather not risk an in-progress upstream change breaking your build.
-external_components:
-  - source: github://nugeOG/timemore-dot-display@main
-    components: [timemore_dot]
-    refresh: 1h
-
-timemore_dot:
-  id: dot_scale
+# TEMPORARILY DISABLED for crash bisection -- a real boot crashes 100%
+# reproducibly right after api's setup(), and diagnostic logging added to
+# TimemoreDot::setup() never printed at all, meaning the crash is NOT in
+# this component. This whole block is commented out so the next build
+# either confirms that (still crashes -> not this component's fault) or
+# contradicts it (boots clean -> was this component after all, despite
+# the log evidence). Uncomment everything below once that's settled --
+# see HANDOFF.md for the full trail.
+#
+# external_components:
+#   - source: github://nugeOG/timemore-dot-display@main
+#     components: [timemore_dot]
+#     refresh: 1h
+#
+# timemore_dot:
+#   id: dot_scale
 
 globals:
   - id: current_flow_rate
@@ -183,70 +187,68 @@ globals:
     restore_value: false
     initial_value: '0'
 
-sensor:
-  - platform: timemore_dot
-    timemore_dot_id: dot_scale
-    weight:
-      name: "${friendly_name} Weight"
-      id: weight_grams
-      on_value:
-        then:
-          - lvgl.label.update:
-              id: lbl_weight
-              text: !lambda 'return str_sprintf("%.1f", x);'
-          # Simple flow-rate estimate from consecutive weight samples --
-          # replace with a smoothed rolling-window calc if this is noisy.
-          - lambda: |-
-              static float last_weight = 0;
-              static uint32_t last_time = 0;
-              uint32_t now = millis();
-              float rate = 0;
-              if (last_time != 0 && now > last_time) {
-                rate = (x - last_weight) / ((now - last_time) / 1000.0f);
-              }
-              last_weight = x;
-              last_time = now;
-              id(current_flow_rate) = rate;
-          - lvgl.label.update:
-              id: lbl_flow
-              text: !lambda 'return str_sprintf("%.1f g/s", id(current_flow_rate));'
-          # Auto-timer state machine hook — see HANDOFF.md "Auto-timer
-          # logic (not scale-dependent)". Not implemented yet: auto-start
-          # on rising weight, auto-stop (plateau for pour-over / sharp drop
-          # for espresso), and honoring id(tare_pending_until) from
-          # scale-display-lvgl.yaml as a suppression window after a tare.
-    battery_level:
-      name: "${friendly_name} Battery"
-      id: scale_battery
-      on_value:
-        then:
-          - lvgl.label.update:
-              id: lbl_battery_pct
-              text: !lambda 'return str_sprintf("%.0f%%", x);'
+# timemore_dot sensor/binary_sensor/button entries commented out along
+# with the component itself above -- see the crash-bisection note there.
+# sensor:
+#   - platform: timemore_dot
+#     timemore_dot_id: dot_scale
+#     weight:
+#       name: "${friendly_name} Weight"
+#       id: weight_grams
+#       on_value:
+#         then:
+#           - lvgl.label.update:
+#               id: lbl_weight
+#               text: !lambda 'return str_sprintf("%.1f", x);'
+#           # Simple flow-rate estimate from consecutive weight samples --
+#           # replace with a smoothed rolling-window calc if this is noisy.
+#           - lambda: |-
+#               static float last_weight = 0;
+#               static uint32_t last_time = 0;
+#               uint32_t now = millis();
+#               float rate = 0;
+#               if (last_time != 0 && now > last_time) {
+#                 rate = (x - last_weight) / ((now - last_time) / 1000.0f);
+#               }
+#               last_weight = x;
+#               last_time = now;
+#               id(current_flow_rate) = rate;
+#           - lvgl.label.update:
+#               id: lbl_flow
+#               text: !lambda 'return str_sprintf("%.1f g/s", id(current_flow_rate));'
+#     battery_level:
+#       name: "${friendly_name} Battery"
+#       id: scale_battery
+#       on_value:
+#         then:
+#           - lvgl.label.update:
+#               id: lbl_battery_pct
+#               text: !lambda 'return str_sprintf("%.0f%%", x);'
 
+sensor:
   - platform: wifi_signal
     name: "${friendly_name} Wifi Signal"
     id: wifi_signal_pct
     update_interval: 60s
 
-binary_sensor:
-  - platform: timemore_dot
-    timemore_dot_id: dot_scale
-    connected:
-      name: "${friendly_name} Scale Connected"
-      id: ble_connected
-      on_state:
-        then:
-          - lvgl.label.update:
-              id: lbl_bt_icon
-              text: !lambda 'return std::string(x ? "\U0000E1A8" : "\U0000E1A9");'
-              text_color: !lambda 'return x ? lv_color_hex(0x5DCAA5) : lv_color_hex(0x7A7A76);'
-
-button:
-  - platform: timemore_dot
-    timemore_dot_id: dot_scale
-    name: "${friendly_name} Tare"
-    id: tare_button
+# binary_sensor:
+#   - platform: timemore_dot
+#     timemore_dot_id: dot_scale
+#     connected:
+#       name: "${friendly_name} Scale Connected"
+#       id: ble_connected
+#       on_state:
+#         then:
+#           - lvgl.label.update:
+#               id: lbl_bt_icon
+#               text: !lambda 'return std::string(x ? "\U0000E1A8" : "\U0000E1A9");'
+#               text_color: !lambda 'return x ? lv_color_hex(0x5DCAA5) : lv_color_hex(0x7A7A76);'
+#
+# button:
+#   - platform: timemore_dot
+#     timemore_dot_id: dot_scale
+#     name: "${friendly_name} Tare"
+#     id: tare_button
 
 packages:
   lvgl_screen:
