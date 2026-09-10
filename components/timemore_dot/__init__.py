@@ -69,6 +69,16 @@ async def to_code(config):
     # to be architecturally wrong for framework: arduino regardless.
     cg.add_library("h2zero/NimBLE-Arduino", "2.3.6")
 
+    # NimBLE-Arduino's own NIMBLE_LOGE() calls (which log the exact esp_err_t
+    # from nvs_flash_init()/esp_bt_controller_init()/enable()/esp_nimble_hci_init()
+    # -- the only paths inside NimBLEDevice::init() that return false) are
+    # compiled out entirely unless CONFIG_NIMBLE_CPP_LOG_LEVEL is defined --
+    # see src/NimBLELog.h, which otherwise falls back to Arduino's
+    # CORE_DEBUG_LEVEL (0 under ESPHome's build). Without this, init()
+    # failing is silent on our end too (nothing to log ourselves -- the
+    # library doesn't expose the esp_err_t to the caller, only true/false).
+    cg.add_build_flag("-DCONFIG_NIMBLE_CPP_LOG_LEVEL=4")
+
     # Nothing else in this config requests Bluetooth (deliberately -- no
     # esp32_ble_tracker/ble_client, see HANDOFF.md's architecture-decision
     # section) so nothing else will enable it in sdkconfig either.

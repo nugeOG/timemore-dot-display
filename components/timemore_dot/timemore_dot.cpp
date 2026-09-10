@@ -1,6 +1,10 @@
 #include "timemore_dot.h"
 #include "esphome/core/log.h"
 
+#include <esp32-hal-bt.h>
+#include <esp_bt.h>
+#include <esp_heap_caps.h>
+
 namespace esphome {
 namespace timemore_dot {
 
@@ -47,6 +51,25 @@ void TimemoreDot::setup() {
 
 void TimemoreDot::start_ble_stack_() {
   ESP_LOGI(TAG, "Starting BLE stack");
+
+  // btStarted() is Arduino's own "is BLE in use" check (esp32-hal-bt.c).
+  // Calling it here forces that translation unit to link -- without any
+  // reference to it, Arduino's initArduino() (which runs before any
+  // ESPHome component code) sees no strong definition claiming BLE is
+  // wanted and calls esp_bt_controller_mem_release(ESP_BT_MODE_BTDM),
+  // freeing the BLE controller's RAM entirely before we ever get here.
+  // NimBLEDevice::init() then fails every one of its esp_bt_controller_*
+  // calls permanently for the rest of this boot (returns false, no crash --
+  // this component's own error handling below is what caught that on the
+  // previous real-hardware test). Confirmed via NimBLE-Arduino's own
+  // source (src/NimBLEDevice.cpp) that init() checks esp_err_t from
+  // nvs_flash_init()/esp_bt_controller_init()/enable()/esp_nimble_hci_init()
+  // and only returns false on those specific failures.
+  ESP_LOGI(TAG, "btStarted()=%d controller_status=%d (0=IDLE 1=INITED 2=ENABLED)", (int) btStarted(),
+           (int) esp_bt_controller_get_status());
+  ESP_LOGI(TAG, "free heap=%u internal=%u largest_internal_block=%u", (unsigned) esp_get_free_heap_size(),
+           (unsigned) heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+           (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
 
   bool ok = NimBLEDevice::init("");
   ESP_LOGI(TAG, "NimBLEDevice::init() returned %s", ok ? "true" : "false");
