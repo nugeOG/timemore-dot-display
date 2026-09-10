@@ -84,6 +84,15 @@ class TimemoreDot : public Component {
   void start_ble_stack_();
   void start_scan_();
   void connect_(const NimBLEAdvertisedDevice *device);
+  // Sets marked_for_reconnect_ and stamps last_reconnect_attempt_ to now --
+  // every failure path needs both, not just the flag, so loop()'s backoff
+  // check actually waits RECONNECT_INTERVAL_MS before retrying instead of
+  // firing on the very next loop() tick (member defaults to 0, so an
+  // unstamped first failure looks like it happened at boot and passes the
+  // backoff check immediately). A real boot hit this: an instant retry
+  // raced NimBLE's own async teardown of the just-timed-out connection
+  // attempt and left the component stuck (see start_scan_()'s comment).
+  void mark_for_reconnect_();
   bool write_frame_(const uint8_t *data, size_t length);
   void handle_frame_(const uint8_t *payload, size_t payload_len, uint8_t frame_class, uint8_t frame_type);
 

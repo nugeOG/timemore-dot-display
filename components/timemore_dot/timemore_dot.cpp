@@ -126,9 +126,31 @@ void TimemoreDot::start_scan_() {
   scan->setActiveScan(true);
   scan->setInterval(100);
   scan->setWindow(100);
+
+  // scan->start() can fail (observed on real hardware: "Unable to scan -
+  // connection in progress", when a just-timed-out connect attempt's
+  // client object hadn't finished its own async teardown yet, racing this
+  // immediate retry). Previously scanning_ was set true unconditionally
+  // here regardless of whether start() actually succeeded -- if it failed,
+  // the component was then permanently stuck: loop()'s reconnect check
+  // requires !scanning_, nothing else ever clears scanning_ back to false,
+  // and on_scan_result()/on_disconnect() (the only other place that
+  // touches it) never fire because no scan is actually running. That
+  // silently stopped all reconnect attempts for the rest of the boot.
+  bool started = scan->start(0 /* duration: scan until we stop it ourselves */, false);
+  if (!started) {
+    ESP_LOGW(TAG, "scan->start() failed, will retry");
+    scanning_ = false;
+    mark_for_reconnect_();
+    return;
+  }
   scanning_ = true;
   marked_for_reconnect_ = false;
-  scan->start(0 /* duration: scan until we stop it ourselves */, false);
+}
+
+void TimemoreDot::mark_for_reconnect_() {
+  marked_for_reconnect_ = true;
+  last_reconnect_attempt_ = millis();
 }
 
 void TimemoreDot::on_scan_result(const NimBLEAdvertisedDevice *device) {
@@ -151,7 +173,7 @@ void TimemoreDot::connect_(const NimBLEAdvertisedDevice *device) {
 
   if (!client_->connect(device)) {
     ESP_LOGW(TAG, "Connect to %s failed, will retry", target_address_.c_str());
-    marked_for_reconnect_ = true;
+    mark_for_reconnect_();
     return;
   }
 
@@ -162,7 +184,7 @@ void TimemoreDot::connect_(const NimBLEAdvertisedDevice *device) {
   if (!client_->secureConnection()) {
     ESP_LOGW(TAG, "Bonding/secure connection to %s failed, disconnecting and retrying", target_address_.c_str());
     client_->disconnect();
-    marked_for_reconnect_ = true;
+    mark_for_reconnect_();
     return;
   }
 
@@ -170,7 +192,7 @@ void TimemoreDot::connect_(const NimBLEAdvertisedDevice *device) {
   if (service == nullptr) {
     ESP_LOGE(TAG, "Service %s not found on %s", SERVICE_UUID, target_address_.c_str());
     client_->disconnect();
-    marked_for_reconnect_ = true;
+    mark_for_reconnect_();
     return;
   }
 
@@ -180,7 +202,7 @@ void TimemoreDot::connect_(const NimBLEAdvertisedDevice *device) {
     ESP_LOGE(TAG, "Characteristics %s/%s not found on %s", NOTIFY_CHAR_UUID, WRITE_CHAR_UUID,
               target_address_.c_str());
     client_->disconnect();
-    marked_for_reconnect_ = true;
+    mark_for_reconnect_();
     return;
   }
 
@@ -199,7 +221,7 @@ void TimemoreDot::on_disconnect() {
   rx_buffer_.clear();
   if (connected_sensor_ != nullptr)
     connected_sensor_->publish_state(false);
-  marked_for_reconnect_ = true;
+  mark_for_reconnect_();
 }
 
 void TimemoreDot::loop() {
