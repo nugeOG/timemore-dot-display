@@ -363,8 +363,14 @@ void TimemoreDot::handle_frame_(const uint8_t *payload, size_t payload_len, uint
     float grams = raw / 10.0f;
     pending_weight_ = grams;
     weight_dirty_ = true;
-  } else if (frame_class == 0x01 && frame_type == 0x05 && payload_len >= 1) {
-    pending_battery_ = payload[0];
+  } else if (frame_class == 0x01 && frame_type == 0x05 && payload_len >= 2) {
+    // payload[0] is a fixed status/category byte (0x02 in the reference
+    // driver's own capture), NOT the battery level -- confirmed against
+    // gaggimate/esp-arduino-ble-scales' dot.cpp, which reads the actual
+    // percentage from payload[1]. Reading payload[0] here instead was why
+    // the battery sensor always showed the same fixed value on real
+    // hardware regardless of the scale's actual charge.
+    pending_battery_ = payload[1];
     battery_dirty_ = true;
   } else {
     ESP_LOGV(TAG, "Unhandled frame class=0x%02X type=0x%02X len=%u", frame_class, frame_type,
