@@ -341,26 +341,47 @@ from that log, both fixed (unverified until the next flash):
     missing `esp_bt.h` recurs, that needs its own investigation rather than
     a revert to esp-nimble-cpp — and (b) whether the boot crash is actually
     resolved.
+18. **Confirmed working end-to-end on real hardware — the BLE connectivity
+    problem is RESOLVED.** After the host-task-deadlock fix (deferring
+    `connect()` out of the scan callback into `loop()`, connecting by
+    address with a 3-attempt retry, and relaxing the scan duty cycle to
+    500/100), a real boot log showed the entire BLE flow succeeding in
+    sequence: scan found the scale → connected → MTU negotiated (247) →
+    `secureConnection()` succeeded (bonded) → service `0xFFF0` and both
+    characteristics `0xFFF1`/`0xFFF2` discovered → the notify
+    subscription's CCCD write completed (`status=0`) → live weight
+    notifications began arriving from the scale (`Got Notification for
+    characteristic uuid: 0xfff1`, repeating). Every failure mode this
+    investigation chased — the boot crash, the silent `init()` failure, the
+    stuck reconnect logic, and the `connect()` timeout/deadlock — is now
+    resolved; the scale connects, bonds, and streams live data reliably.
+    **One more real bug found and fixed in the same test**: a scan result
+    that had been queued just before `scan->stop()` took effect still
+    reached `loop()` (via the `have_pending_connect_` flag) a few seconds
+    *after* the connection had already succeeded — which would have torn
+    down a perfectly healthy connection in order to spuriously "reconnect"
+    to the same device. Fixed by having `loop()` check
+    `client_->isConnected()` before acting on a pending scan match.
 
-The code for all of the following now exists, and it's now been through a
-real boot (see milestone above) — with `timemore_dot` re-enabled, verify
-in this order (test the riskiest part first) rather than assuming a
-clean build means it all works:
-1. **Confirm the NimBLE-Arduino swap compiles and fixes the BLE boot
-   crash on real hardware** (see #17). Everything below is blocked on this.
-   ~~Switch from `cg.add_library()` to `esp32.add_idf_component()`~~ —
-   **no longer needed**: that suggestion came from a now-superseded theory
-   about `cg.add_library()` vs ESP-IDF components. The real fix is the
-   NimBLE-Arduino library swap, which stays on `framework: arduino`.
-2. Bonding — does `secureConnection()` actually succeed on this board's
-   NimBLE stack at all? Everything downstream depends on this. Watch the
-   logs (`logger:` is enabled) for "Bonding/secure connection ... failed".
-3. Frame decode — do the weight/battery entities in Home Assistant show
-   sane, updating values once bonded?
-4. Tare — does pressing the on-screen tare button (or the HA `tare_button`
-   entity) actually zero the scale?
-5. Reconnection — pull the scale out of range or power-cycle it; does the
-   scale entity reconnect on its own within a few reconnect-backoff cycles?
+Connection and bonding are now confirmed on real hardware (see #18), so
+what's left to verify is everything downstream of the byte stream. Verify
+in this order (riskiest first) rather than assuming live notifications
+mean the decode is right:
+1. Weight frame decode — compare the grams shown on the display (and the
+   HA weight entity) against the scale's own reading / a known reference
+   weight. Live notifications arriving is not proof the `×10` signed
+   big-endian int32 at bytes `[6..9]` is being read correctly.
+2. Battery frame decode — does the battery entity show a sane, plausible
+   percentage that tracks the scale's real charge level?
+3. Tare — does pressing the on-screen tare button (or the HA `tare_button`
+   entity) actually zero the scale, including the second handshake write
+   the scale needs before it commits?
+4. Reconnection — power-cycle the scale or pull it out of range while the
+   ESP32 keeps running; does it reconnect on its own within a few
+   reconnect-backoff cycles?
+5. Auto-timer start/stop detection (see "Auto-timer logic" below) — still
+   pending/deferred; it's computed entirely on-device from the weight
+   stream, so it can't be evaluated until the decode above is trusted.
 
 ## Screen orientation — corrected to native landscape
 
@@ -545,12 +566,14 @@ ESPHome config):
 3. ~~`lvgl.arc.update` action name~~ **Resolved**: config validation now
    passes clean on ESPHome 2026.8.2 (confirmed by an actual build reaching
    the C++ compile stage), so this action name is correct as written.
-4. **`timemore_dot` external component** — written (`components/timemore_dot/`),
-   config-validates and compiles most of the way on a real build (see
-   "build status" above) but hasn't successfully linked/flashed yet as of
-   this writing. Now uses `h2zero/NimBLE-Arduino` again (switched back from
-   `h2zero/esp-nimble-cpp` — see build-status #17 for why), unconfirmed on
-   real hardware.
+4. ~~`timemore_dot` external component — BLE connectivity~~ **Resolved**:
+   builds, flashes, boots, connects, bonds, and streams live weight
+   notifications on real hardware (see build-status #18). Uses
+   `h2zero/NimBLE-Arduino`, with `connect()` deferred out of the scan
+   callback into `loop()` to avoid deadlocking on NimBLE's own host task.
+   What's still unverified is everything *downstream* of the byte stream —
+   weight decode, battery decode, tare, reconnection, and the auto-timer
+   detection logic (see the numbered verify-in-this-order list above).
 5. ~~Touchscreen calibration~~ **Resolved**: `calibration:` in
    `timemore-dot-display.yaml` now uses real measured values from tapping
    all four corners (see "Screen orientation" below for the full trail),

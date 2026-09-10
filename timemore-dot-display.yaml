@@ -277,6 +277,27 @@ binary_sensor:
               id: lbl_bt_icon
               text: !lambda 'return std::string(x ? "\U0000E1A8" : "\U0000E1A9");'
               text_color: !lambda 'return x ? lv_color_hex(0x5DCAA5) : lv_color_hex(0x7A7A76);'
+          # Swap between the main (weight/timer) view and the full-screen
+          # "not connected" prompt -- see scale-display-lvgl.yaml for both
+          # containers.
+          - lvgl.obj.update:
+              id: connected_view
+              hidden: !lambda 'return !x;'
+          - lvgl.obj.update:
+              id: disconnected_view
+              hidden: !lambda 'return x;'
+
+text_sensor:
+  - platform: timemore_dot
+    timemore_dot_id: dot_scale
+    status:
+      name: "${friendly_name} Scale Status"
+      id: ble_status
+      on_value:
+        then:
+          - lvgl.label.update:
+              id: lbl_ble_status
+              text: !lambda 'return x;'
 
 button:
   - platform: timemore_dot

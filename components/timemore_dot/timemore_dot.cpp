@@ -149,11 +149,18 @@ void TimemoreDot::start_scan_() {
   }
   scanning_ = true;
   marked_for_reconnect_ = false;
+  set_status_(BleStatus::SCANNING);
 }
 
 void TimemoreDot::mark_for_reconnect_() {
   marked_for_reconnect_ = true;
   last_reconnect_attempt_ = millis();
+  set_status_(BleStatus::RECONNECTING);
+}
+
+void TimemoreDot::set_status_(BleStatus status) {
+  pending_status_ = status;
+  status_dirty_ = true;
 }
 
 void TimemoreDot::on_scan_result(const NimBLEAdvertisedDevice *device) {
@@ -168,6 +175,7 @@ void TimemoreDot::on_scan_result(const NimBLEAdvertisedDevice *device) {
 
 void TimemoreDot::connect_(const NimBLEAddress &address) {
   target_address_ = address.toString();
+  set_status_(BleStatus::CONNECTING);
 
   // A fresh client per attempt, not a reused one -- matches the reference
   // driver and avoids retrying against a client object left in a bad state
@@ -226,6 +234,7 @@ void TimemoreDot::connect_(const NimBLEAddress &address) {
       true, [this](NimBLERemoteCharacteristic *c, uint8_t *data, size_t length, bool is_notify) {
         this->on_notify(data, length);
       });
+  set_status_(BleStatus::CONNECTED);
 }
 
 void TimemoreDot::on_connect() { ESP_LOGI(TAG, "Connected to %s", target_address_.c_str()); }
@@ -251,6 +260,12 @@ void TimemoreDot::loop() {
     weight_sensor_->publish_state(pending_weight_.load());
   if (battery_dirty_.exchange(false) && battery_sensor_ != nullptr)
     battery_sensor_->publish_state(pending_battery_.load());
+  if (status_dirty_.exchange(false) && status_sensor_ != nullptr) {
+    static const char *const STATUS_TEXT[] = {
+        "Waiting for wifi", "Scanning", "Connecting", "Connected", "Reconnecting",
+    };
+    status_sensor_->publish_state(STATUS_TEXT[static_cast<int>(pending_status_.load())]);
+  }
 
   if (!ble_started_) {
     // wifi::global_wifi_component is always non-null once the wifi

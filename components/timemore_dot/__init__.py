@@ -12,7 +12,7 @@ CODEOWNERS = ["@nuge"]
 # past its own setup() -- see timemore_dot.h's start_ble_stack_() comment).
 DEPENDENCIES = ["esp32", "wifi"]
 CONFLICTS_WITH = ["esp32_ble_tracker", "ble_client"]
-AUTO_LOAD = ["sensor", "binary_sensor", "button"]
+AUTO_LOAD = ["sensor", "binary_sensor", "button", "text_sensor"]
 MULTI_CONF = True
 
 timemore_dot_ns = cg.esphome_ns.namespace("timemore_dot")

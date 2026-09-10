@@ -45,30 +45,48 @@
 # ============================================================================
 
 font:
+  # bpp: 4 on every font -- ESPHome/LVGL default to 1bpp (pure on/off
+  # pixels, no anti-aliasing) unless told otherwise, which is what made
+  # text look blocky/jagged on real hardware. 4bpp renders each glyph with
+  # 16 levels of edge grayscale instead, at the cost of a larger font
+  # bitmap in flash (worth it here; nothing size-constrained about this
+  # build).
   - file:
       type: gfonts
       family: Inter
       weight: 500
     id: font_time
     size: 18
+    bpp: 4
   - file:
       type: gfonts
       family: Inter
       weight: 500
     id: font_weight
     size: 60
+    bpp: 4
   - file:
       type: gfonts
       family: Inter
       weight: 400
     id: font_small
     size: 11
+    bpp: 4
   - file:
       type: gfonts
       family: Inter
       weight: 500
     id: font_timer
     size: 32
+    bpp: 4
+  # Large clock shown on the full-screen "not connected" prompt.
+  - file:
+      type: gfonts
+      family: Inter
+      weight: 500
+    id: font_big_time
+    size: 48
+    bpp: 4
   # Google's Material Symbols Outlined icon font, codepoints looked up from
   # google/material-design-icons' *.codepoints file for the variable-font
   # family (not verified by rendering — double check the glyph shown for
@@ -76,6 +94,7 @@ font:
   - file: "gfonts://Material+Symbols+Outlined"
     id: font_icons
     size: 20
+    bpp: 4
     glyphs:
       - "\U0000E63E"   # wifi
       - "\U0000E1A8"   # bluetooth_connected
@@ -151,12 +170,21 @@ interval:
 
   - interval: 1s
     then:
-      # refresh clock + date labels from the sntp time source
+      # refresh clock + date labels from the sntp time source -- both the
+      # small status-row ones (always present) and the big ones on the
+      # full-screen "not connected" prompt (only actually visible while
+      # disconnected_view is shown, but cheap enough to just always update).
       - lvgl.label.update:
           id: lbl_time
           text: !lambda 'return id(sntp_time).now().strftime("%H:%M");'
       - lvgl.label.update:
           id: lbl_date
+          text: !lambda 'return id(sntp_time).now().strftime("%a, %b %d");'
+      - lvgl.label.update:
+          id: lbl_big_time
+          text: !lambda 'return id(sntp_time).now().strftime("%H:%M");'
+      - lvgl.label.update:
+          id: lbl_big_date
           text: !lambda 'return id(sntp_time).now().strftime("%a, %b %d");'
 
 # ----------------------------------------------------------------------------
@@ -254,7 +282,7 @@ lvgl:
             text: "----"
         - label:
             id: lbl_wifi_icon
-            x: 198
+            x: 206
             y: 6
             text_font: font_icons
             text_color: 0x5DCAA5
@@ -264,175 +292,243 @@ lvgl:
             # isn't up yet at boot. Swapped to bluetooth_connected/bright
             # by ble_connected's on_state trigger in timemore-dot-display.yaml.
             id: lbl_bt_icon
-            x: 224
+            x: 232
             y: 6
             text_font: font_icons
             text_color: 0x7A7A76
             text: "\U0000E1A9"
-        - label:
-            id: lbl_battery_pct
-            x: 250
-            y: 8
-            text_font: font_small
-            text_color: 0xC9C9C4
-            text: "--%"
+        # Battery icon + percentage grouped together with a wider gap after
+        # the bluetooth icon -- previously the percentage label sat almost
+        # immediately next to the bluetooth icon (only a few px of gap) and
+        # much further from its own battery icon, making it read as if it
+        # belonged to bluetooth instead.
         - label:
             id: lbl_battery_icon
-            x: 284
+            x: 264
             y: 6
             text_font: font_icons
             text_color: 0xC9C9C4
             text: "\U0000E1A5"
-
-        # ---- weight + flow, left column (y 40-160, x 8-175) ----
         - label:
-            id: lbl_weight
-            x: 8
-            y: 46
-            text_font: font_weight
-            text_color: 0xF2F2EF
-            text: "0.0"
-        - label:
-            id: lbl_flow_icon
-            x: 8
-            y: 130
-            text_font: font_icons
-            text_color: 0x7A7A76
-            text: "\U0000E798"
-        - label:
-            id: lbl_flow
-            x: 32
-            y: 130
+            id: lbl_battery_pct
+            x: 286
+            y: 8
             text_font: font_small
-            text_color: 0x7A7A76
-            text: "0.0 g/s"
+            text_color: 0xC9C9C4
+            text: "--%"
 
-        # ---- timer + mode, right column (y 46-140, x 185-312) ----
-        - label:
-            id: lbl_timer
-            x: 185
-            y: 50
-            text_font: font_timer
-            text_color: 0xF2F2EF
-            text: "00:00"
-        # "auto" badge — hidden by default; show/hide this from the
-        # auto-timer detection logic once it's implemented (see HANDOFF.md,
-        # "Auto-timer logic"). Position is a first guess, not yet verified
-        # against real rendering.
-        - label:
-            id: lbl_auto_badge
-            x: 270
-            y: 58
-            text_font: font_small
-            text_color: 0x5DCAA5
-            text: "AUTO"
+        # ---- everything below the status row lives in one of these two
+        # full-screen containers, toggled by ble_connected's on_state
+        # trigger in timemore-dot-display.yaml -- never both visible at
+        # once. Starts on disconnected_view since the scale isn't connected
+        # yet at boot.
+        - obj:
+            id: connected_view
+            x: 0
+            y: 0
+            width: 320
+            height: 240
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
             hidden: true
-        - label:
-            id: lbl_mode
-            x: 185
-            y: 95
-            text_font: font_small
-            text_color: 0x7A7A76
-            text: "Pour-over mode"
-
-        # ---- button row, bottom (y 176-230, spans full width) ----
-        - button:
-            id: btn_tare
-            x: 20
-            y: 180
-            width: 46
-            height: 46
-            radius: 23
-            bg_color: 0x1C211F
             widgets:
+
+              # ---- weight + flow, left column (y 40-160, x 8-175) ----
               - label:
-                  align: CENTER
-                  text_font: font_icons
+                  id: lbl_weight
+                  x: 8
+                  y: 46
+                  text_font: font_weight
                   text_color: 0xF2F2EF
-                  text: "\U0000E3CF"
-            on_click:
-              - script.execute: do_tare
-
-        - button:
-            id: btn_playpause
-            x: 93
-            y: 176
-            width: 54
-            height: 54
-            radius: 27
-            bg_color: 0x1D9E75
-            widgets:
+                  text: "0.0"
               - label:
-                  id: lbl_playpause_icon
-                  align: CENTER
+                  id: lbl_flow_icon
+                  x: 8
+                  y: 130
                   text_font: font_icons
-                  text_color: 0x04342C
-                  text: "\U0000E037"
-            on_click:
-              - script.execute: toggle_timer
-
-        # reset control: arc (progress ring) + button drawn as overlapping
-        # siblings — the button is declared after the arc so it renders on
-        # top, avoiding any assumption about whether `arc` supports nested
-        # child widgets.
-        - arc:
-            id: arc_reset
-            x: 174
-            y: 176
-            width: 54
-            height: 54
-            min_value: 0
-            max_value: 1500
-            value: 0
-            arc_width: 6
-            arc_color: 0x2A302D
-            adjustable: false
-            indicator:
-              arc_width: 6
-              arc_color: 0xF09595
-        - button:
-            id: btn_reset
-            x: 180
-            y: 182
-            width: 42
-            height: 42
-            radius: 21
-            bg_color: 0x1C211F
-            widgets:
+                  text_color: 0x7A7A76
+                  text: "\U0000E798"
               - label:
-                  align: CENTER
-                  text_font: font_icons
+                  id: lbl_flow
+                  x: 32
+                  y: 130
+                  text_font: font_small
+                  text_color: 0x7A7A76
+                  text: "0.0 g/s"
+
+              # ---- timer + mode, right column (y 46-140, x 185-312) ----
+              - label:
+                  id: lbl_timer
+                  x: 185
+                  y: 50
+                  text_font: font_timer
                   text_color: 0xF2F2EF
-                  text: "\U0000E5D5"
-            on_press:
-              - lambda: |-
-                  id(reset_held) = true;
-                  id(reset_hold_ms) = 0;
-            on_release:
-              - lambda: |-
-                  id(reset_held) = false;
-                  id(reset_hold_ms) = 0;
-              - lvgl.arc.update:
+                  text: "00:00"
+              # "auto" badge — hidden by default; show/hide this from the
+              # auto-timer detection logic once it's implemented (see
+              # HANDOFF.md, "Auto-timer logic"). Position is a first guess,
+              # not yet verified against real rendering.
+              - label:
+                  id: lbl_auto_badge
+                  x: 270
+                  y: 58
+                  text_font: font_small
+                  text_color: 0x5DCAA5
+                  text: "AUTO"
+                  hidden: true
+              - label:
+                  id: lbl_mode
+                  x: 185
+                  y: 95
+                  text_font: font_small
+                  text_color: 0x7A7A76
+                  text: "Pour-over mode"
+
+              # ---- button row, bottom (y 176-230, spans full width) ----
+              - button:
+                  id: btn_tare
+                  x: 20
+                  y: 180
+                  width: 46
+                  height: 46
+                  radius: 23
+                  bg_color: 0x1C211F
+                  widgets:
+                    - label:
+                        align: CENTER
+                        text_font: font_icons
+                        text_color: 0xF2F2EF
+                        text: "\U0000E3CF"
+                  on_click:
+                    - script.execute: do_tare
+
+              - button:
+                  id: btn_playpause
+                  x: 93
+                  y: 176
+                  width: 54
+                  height: 54
+                  radius: 27
+                  bg_color: 0x1D9E75
+                  widgets:
+                    - label:
+                        id: lbl_playpause_icon
+                        align: CENTER
+                        text_font: font_icons
+                        text_color: 0x04342C
+                        text: "\U0000E037"
+                  on_click:
+                    - script.execute: toggle_timer
+
+              # reset control: arc (progress ring) + button drawn as
+              # overlapping siblings — the button is declared after the arc
+              # so it renders on top, avoiding any assumption about whether
+              # `arc` supports nested child widgets.
+              - arc:
                   id: arc_reset
+                  x: 174
+                  y: 176
+                  width: 54
+                  height: 54
+                  min_value: 0
+                  max_value: 1500
                   value: 0
+                  arc_width: 6
+                  arc_color: 0x2A302D
+                  adjustable: false
+                  indicator:
+                    arc_width: 6
+                    arc_color: 0xF09595
+              - button:
+                  id: btn_reset
+                  x: 180
+                  y: 182
+                  width: 42
+                  height: 42
+                  radius: 21
+                  bg_color: 0x1C211F
+                  widgets:
+                    - label:
+                        align: CENTER
+                        text_font: font_icons
+                        text_color: 0xF2F2EF
+                        text: "\U0000E5D5"
+                  on_press:
+                    - lambda: |-
+                        id(reset_held) = true;
+                        id(reset_hold_ms) = 0;
+                  on_release:
+                    - lambda: |-
+                        id(reset_held) = false;
+                        id(reset_hold_ms) = 0;
+                    - lvgl.arc.update:
+                        id: arc_reset
+                        value: 0
 
-        - button:
-            id: btn_mode
-            x: 255
-            y: 180
-            width: 46
-            height: 46
-            radius: 23
-            bg_color: 0x1C211F
+              - button:
+                  id: btn_mode
+                  x: 255
+                  y: 180
+                  width: 46
+                  height: 46
+                  radius: 23
+                  bg_color: 0x1C211F
+                  widgets:
+                    - label:
+                        id: lbl_mode_icon
+                        align: CENTER
+                        text_font: font_icons
+                        text_color: 0xF2F2EF
+                        text: "\U0000EFEF"
+                  on_click:
+                    - script.execute: toggle_mode
+
+        # Full-screen "not connected" prompt -- visible by default (the
+        # scale isn't connected yet at boot), swapped with connected_view
+        # above by ble_connected's on_state trigger in
+        # timemore-dot-display.yaml. Its own big clock is kept in sync by
+        # the same 1s interval that updates the small status-row lbl_time/
+        # lbl_date below.
+        - obj:
+            id: disconnected_view
+            x: 0
+            y: 0
+            width: 320
+            height: 240
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            hidden: false
             widgets:
               - label:
-                  id: lbl_mode_icon
-                  align: CENTER
-                  text_font: font_icons
+                  id: lbl_big_time
+                  align: TOP_MID
+                  y: 55
+                  text_font: font_big_time
                   text_color: 0xF2F2EF
-                  text: "\U0000EFEF"
-            on_click:
-              - script.execute: toggle_mode
+                  text: "--:--"
+              - label:
+                  id: lbl_big_date
+                  align: TOP_MID
+                  y: 112
+                  text_font: font_time
+                  text_color: 0x7A7A76
+                  text: "----"
+              - label:
+                  id: lbl_connect_prompt
+                  align: TOP_MID
+                  y: 148
+                  text_font: font_time
+                  text_color: 0xC9C9C4
+                  text: "Connect scale to begin"
+              - label:
+                  id: lbl_ble_status
+                  align: TOP_MID
+                  y: 178
+                  text_font: font_small
+                  text_color: 0x5DCAA5
+                  text: "Waiting for wifi"
 
 # ----------------------------------------------------------------------------
 # Live sensor wiring now lives in timemore-dot-display.yaml (the top-level

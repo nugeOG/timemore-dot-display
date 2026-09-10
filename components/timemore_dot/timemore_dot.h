@@ -26,6 +26,7 @@
 #include "esphome/core/component.h"
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
+#include "esphome/components/text_sensor/text_sensor.h"
 #include "esphome/components/button/button.h"
 #include "esphome/components/wifi/wifi_component.h"
 
@@ -47,6 +48,18 @@ static const char *const WRITE_CHAR_UUID = "FFF2";
 // have more than one Dot nearby.
 static const char *const DEVICE_NAME_PREFIX = "TIMEMORE_Dot";
 
+// Exposed via a text_sensor (see text_sensor.py / set_status_sensor()) so
+// the display's "disconnected" screen can show what's actually happening
+// (scanning vs. connecting vs. waiting to retry) rather than a single
+// generic "not connected" state.
+enum class BleStatus {
+  WAITING_FOR_WIFI,
+  SCANNING,
+  CONNECTING,
+  CONNECTED,
+  RECONNECTING,
+};
+
 class TimemoreDot : public Component {
  public:
   void setup() override;
@@ -60,6 +73,7 @@ class TimemoreDot : public Component {
   void set_weight_sensor(sensor::Sensor *s) { weight_sensor_ = s; }
   void set_battery_sensor(sensor::Sensor *s) { battery_sensor_ = s; }
   void set_connected_sensor(binary_sensor::BinarySensor *s) { connected_sensor_ = s; }
+  void set_status_sensor(text_sensor::TextSensor *s) { status_sensor_ = s; }
 
   // Writes the tare command frame, then the handshake/poll follow-up frame
   // -- the scale doesn't actually zero until that second write lands (see
@@ -115,6 +129,11 @@ class TimemoreDot : public Component {
   // raced NimBLE's own async teardown of the just-timed-out connection
   // attempt and left the component stuck (see start_scan_()'s comment).
   void mark_for_reconnect_();
+  // Buffers a status_sensor_ update the same way weight/battery/connected
+  // are buffered -- see those members' comment for why this can't publish
+  // directly, since this is called from both the host task (scan/connect
+  // callbacks) and loop() itself.
+  void set_status_(BleStatus status);
   bool write_frame_(const uint8_t *data, size_t length);
   void handle_frame_(const uint8_t *payload, size_t payload_len, uint8_t frame_class, uint8_t frame_type);
 
@@ -148,6 +167,7 @@ class TimemoreDot : public Component {
   sensor::Sensor *weight_sensor_{nullptr};
   sensor::Sensor *battery_sensor_{nullptr};
   binary_sensor::BinarySensor *connected_sensor_{nullptr};
+  text_sensor::TextSensor *status_sensor_{nullptr};
 
   // publish_state() must only ever be called from loop() (ESPHome's main
   // task), never directly from on_notify()/on_connect()/on_disconnect(),
@@ -168,6 +188,8 @@ class TimemoreDot : public Component {
   std::atomic<uint8_t> pending_battery_{0};
   std::atomic<bool> connected_dirty_{false};
   std::atomic<bool> pending_connected_{false};
+  std::atomic<bool> status_dirty_{false};
+  std::atomic<BleStatus> pending_status_{BleStatus::WAITING_FOR_WIFI};
 
   // Reassembly buffer -- a single NimBLE notification isn't guaranteed to
   // land as exactly one protocol frame, so we buffer and slice frames out
