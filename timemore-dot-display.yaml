@@ -14,12 +14,13 @@
 # real values (the ESPHome add-on keeps one shared secrets.yaml for all your
 # device configs, so you likely already have one; just add these keys to it).
 #
-# NOT YET BUILT OR TESTED ON REAL HARDWARE. See HANDOFF.md for full status —
-# in short: the BLE protocol is confirmed from source, the display/touch
-# section below is a best-guess placeholder for a specific commonly-sold
-# board (not confirmed to match what you actually bought), and the
-# timemore_dot component compiles against an API surface that hasn't been
-# verified by an actual build yet.
+# See HANDOFF.md for full status. As of this writing: the display and
+# touchscreen are confirmed working on real hardware (correct orientation,
+# all four buttons register correctly, touch calibrated to real measured
+# values) -- see the "Screen orientation" section there for that trail.
+# The timemore_dot BLE component is still being debugged: it compiles and
+# links, but crashes on boot inside NimBLE's own init sequence, and a
+# wifi/BT coexistence fix has been applied but not yet proven to fix it.
 # ============================================================================
 
 substitutions:
@@ -83,17 +84,16 @@ time:
     id: sntp_time
 
 # ----------------------------------------------------------------------
-# Display + touch — PLACEHOLDER pin assignments.
+# Display + touch — pins and driver confirmed on real hardware.
 #
-# HANDOFF.md open item #1: the exact driver chip / touch controller /
-# pinout for the specific board purchased was never confirmed. The pins
-# below match the commonly-sold "Cheap Yellow Display" (ESP32-2432S028R,
-# ILI9341 + resistive XPT2046) because the listing description recorded in
-# HANDOFF.md ("2.8 inch ESP32 LVGL WIFI Bluetooth Touch 240x320") is close
-# to verbatim marketing copy for that specific board — but this is a guess
-# based on how it's usually sold, NOT a confirmed match to your unit.
-# CONFIRM against your board's actual silkscreen/schematic before trusting
-# any pin number here; it genuinely varies between near-identical listings.
+# The board's silkscreen reads "TPM408-2.8", a specific "Cheap Yellow
+# Display" variant -- a community TFT_eSPI config for that exact board
+# uses these same SPI/CS/DC/backlight pins, and confirmed on real hardware
+# renders correctly with model: ILI9342 (see HANDOFF.md's "Screen
+# orientation" section for the full trail, including a first attempt
+# that didn't work). Touch pins (XPT2046 IRQ/CS/its own SPI bus) were
+# never independently verified against a schematic, but work correctly
+# in practice -- see the confirmed calibration values below.
 # ----------------------------------------------------------------------
 spi:
   - id: tft_spi
@@ -198,23 +198,19 @@ touchscreen:
 # ----------------------------------------------------------------------
 # BLE scale component + entities
 # ----------------------------------------------------------------------
-# TEMPORARILY DISABLED -- the crash bisection test (removing this block
-# entirely) booted clean with no crash, confirming the boot crash IS tied
-# to this component after all. The earlier "diagnostic logging never
-# printed" result that seemed to rule it out was almost certainly a stale
-# build: the git refresh caching (`refresh: 1h`) bit us more than once
-# during this investigation, so that test may never have actually run the
-# instrumented code. Re-enable once the underlying NimBLE/esp-nimble-cpp
-# init crash itself is fixed -- see HANDOFF.md for the full trail and
-# next steps. Left in place as comments for an easy revert.
-#
-# external_components:
-#   - source: github://nugeOG/timemore-dot-display@main
-#     components: [timemore_dot]
-#     refresh: always
-#
-# timemore_dot:
-#   id: dot_scale
+# Re-enabled. Was disabled for a crash bisection test that confirmed the
+# boot crash IS tied to this component -- see HANDOFF.md for the full
+# trail (a wifi/BT coexistence fix was applied but never actually proven,
+# since the git refresh caching muddied that test too; the display/touch
+# work happened in the meantime while this stayed disabled). Picking the
+# NimBLE crash investigation back up now.
+external_components:
+  - source: github://nugeOG/timemore-dot-display@main
+    components: [timemore_dot]
+    refresh: always
+
+timemore_dot:
+  id: dot_scale
 
 globals:
   - id: current_flow_rate
@@ -222,68 +218,65 @@ globals:
     restore_value: false
     initial_value: '0'
 
-# timemore_dot sensor/binary_sensor/button entries commented out along
-# with the component itself above -- see the crash-bisection note there.
-# sensor:
-#   - platform: timemore_dot
-#     timemore_dot_id: dot_scale
-#     weight:
-#       name: "${friendly_name} Weight"
-#       id: weight_grams
-#       on_value:
-#         then:
-#           - lvgl.label.update:
-#               id: lbl_weight
-#               text: !lambda 'return str_sprintf("%.1f", x);'
-#           # Simple flow-rate estimate from consecutive weight samples --
-#           # replace with a smoothed rolling-window calc if this is noisy.
-#           - lambda: |-
-#               static float last_weight = 0;
-#               static uint32_t last_time = 0;
-#               uint32_t now = millis();
-#               float rate = 0;
-#               if (last_time != 0 && now > last_time) {
-#                 rate = (x - last_weight) / ((now - last_time) / 1000.0f);
-#               }
-#               last_weight = x;
-#               last_time = now;
-#               id(current_flow_rate) = rate;
-#           - lvgl.label.update:
-#               id: lbl_flow
-#               text: !lambda 'return str_sprintf("%.1f g/s", id(current_flow_rate));'
-#     battery_level:
-#       name: "${friendly_name} Battery"
-#       id: scale_battery
-#       on_value:
-#         then:
-#           - lvgl.label.update:
-#               id: lbl_battery_pct
-#               text: !lambda 'return str_sprintf("%.0f%%", x);'
-
 sensor:
+  - platform: timemore_dot
+    timemore_dot_id: dot_scale
+    weight:
+      name: "${friendly_name} Weight"
+      id: weight_grams
+      on_value:
+        then:
+          - lvgl.label.update:
+              id: lbl_weight
+              text: !lambda 'return str_sprintf("%.1f", x);'
+          # Simple flow-rate estimate from consecutive weight samples --
+          # replace with a smoothed rolling-window calc if this is noisy.
+          - lambda: |-
+              static float last_weight = 0;
+              static uint32_t last_time = 0;
+              uint32_t now = millis();
+              float rate = 0;
+              if (last_time != 0 && now > last_time) {
+                rate = (x - last_weight) / ((now - last_time) / 1000.0f);
+              }
+              last_weight = x;
+              last_time = now;
+              id(current_flow_rate) = rate;
+          - lvgl.label.update:
+              id: lbl_flow
+              text: !lambda 'return str_sprintf("%.1f g/s", id(current_flow_rate));'
+    battery_level:
+      name: "${friendly_name} Battery"
+      id: scale_battery
+      on_value:
+        then:
+          - lvgl.label.update:
+              id: lbl_battery_pct
+              text: !lambda 'return str_sprintf("%.0f%%", x);'
+
   - platform: wifi_signal
     name: "${friendly_name} Wifi Signal"
     id: wifi_signal_pct
     update_interval: 60s
 
-# binary_sensor:
-#   - platform: timemore_dot
-#     timemore_dot_id: dot_scale
-#     connected:
-#       name: "${friendly_name} Scale Connected"
-#       id: ble_connected
-#       on_state:
-#         then:
-#           - lvgl.label.update:
-#               id: lbl_bt_icon
-#               text: !lambda 'return std::string(x ? "\U0000E1A8" : "\U0000E1A9");'
-#               text_color: !lambda 'return x ? lv_color_hex(0x5DCAA5) : lv_color_hex(0x7A7A76);'
-#
-# button:
-#   - platform: timemore_dot
-#     timemore_dot_id: dot_scale
-#     name: "${friendly_name} Tare"
-#     id: tare_button
+binary_sensor:
+  - platform: timemore_dot
+    timemore_dot_id: dot_scale
+    connected:
+      name: "${friendly_name} Scale Connected"
+      id: ble_connected
+      on_state:
+        then:
+          - lvgl.label.update:
+              id: lbl_bt_icon
+              text: !lambda 'return std::string(x ? "\U0000E1A8" : "\U0000E1A9");'
+              text_color: !lambda 'return x ? lv_color_hex(0x5DCAA5) : lv_color_hex(0x7A7A76);'
+
+button:
+  - platform: timemore_dot
+    timemore_dot_id: dot_scale
+    name: "${friendly_name} Tare"
+    id: tare_button
 
 packages:
   lvgl_screen:

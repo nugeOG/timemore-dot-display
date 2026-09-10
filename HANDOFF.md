@@ -221,20 +221,26 @@ from that log, both fixed (unverified until the next flash):
     testing the code they claimed to -- this whole investigation kept
     tripping on the same `refresh: 1h` git-cache staleness documented
     elsewhere in this doc (rebuilding without first bumping to
-    `refresh: always` silently re-tests old component code). **The
-    `timemore_dot` block is currently commented out in
-    `timemore-dot-display.yaml`** (with `do_tare`'s `button.press` also
-    stubbed to a log line in `scale-display-lvgl.yaml`, since
-    `tare_button` doesn't exist while it's disabled) — re-enable both,
-    make certain `refresh: always` is set before that specific rebuild,
-    and pick the NimBLE crash investigation back up from the
-    coexistence-fix step (already applied, but never actually proven
-    either way).
+    `refresh: always` silently re-tests old component code). By the time
+    this was understood, focus shifted to the display/touch work (see
+    "Screen orientation" below); `timemore_dot` stayed disabled while
+    that happened.
+12. **Re-enabled** now that the display/touch investigation is done:
+    `timemore_dot:`, its `external_components:` entry, and the
+    sensor/binary_sensor/button platform entries are back in
+    `timemore-dot-display.yaml`, and `do_tare` calls `button.press:
+    tare_button` again in `scale-display-lvgl.yaml`. The coexistence fix
+    from step 8 is still in place but was never actually proven to work
+    (or not) given the caching confusion above — this next build is the
+    first real test of it since it was written. `refresh: always` is
+    already the default in this file, so no manual bump should be needed
+    this time, but double-check the local `timemore-dot-display.yaml` on
+    your Home Assistant is the current version (re-download if unsure).
 
 The code for all of the following now exists, and it's now been through a
-real boot (see milestone above) — when you re-enable `timemore_dot` and
-build next, verify in this order (test the riskiest part first) rather
-than assuming a clean build means it all works:
+real boot (see milestone above) — with `timemore_dot` re-enabled, verify
+in this order (test the riskiest part first) rather than assuming a
+clean build means it all works:
 1. Bonding — does `secureConnection()` actually succeed on this board's
    NimBLE stack at all? Everything downstream depends on this. Watch the
    logs (`logger:` is enabled) for "Bonding/secure connection ... failed".
