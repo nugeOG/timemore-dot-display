@@ -25,6 +25,7 @@
 #include "esphome/components/sensor/sensor.h"
 #include "esphome/components/binary_sensor/binary_sensor.h"
 #include "esphome/components/button/button.h"
+#include "esphome/components/wifi/wifi_component.h"
 
 #include <NimBLEDevice.h>
 
@@ -70,10 +71,23 @@ class TimemoreDot : public Component {
   void on_notify(const uint8_t *data, size_t length);
 
  protected:
+  // Everything that used to run directly in setup() -- NimBLEDevice::init()
+  // and onward. A real boot crashed 100% reproducibly inside NimBLE's own
+  // init sequence (nimble_port_run/host_task) when this ran at setup()
+  // time, i.e. right as wifi's own setup() had *just* finished but before
+  // it had actually associated -- a wifi/BT coexistence sdkconfig fix
+  // (still applied, see __init__.py) did not resolve it. Deferred to the
+  // first loop() iteration after wifi actually reports connected, not
+  // just past its own setup(), as the next thing to try -- see HANDOFF.md.
+  void start_ble_stack_();
   void start_scan_();
   void connect_(const NimBLEAdvertisedDevice *device);
   bool write_frame_(const uint8_t *data, size_t length);
   void handle_frame_(const uint8_t *payload, size_t payload_len, uint8_t frame_class, uint8_t frame_type);
+
+  // Guards start_ble_stack_() so it runs exactly once, from loop(), once
+  // wifi is confirmed connected.
+  bool ble_started_{false};
 
   NimBLEClient *client_{nullptr};
   NimBLERemoteCharacteristic *write_char_{nullptr};

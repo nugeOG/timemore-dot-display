@@ -38,12 +38,15 @@ class TimemoreDotScanCallbacks : public NimBLEScanCallbacks {
 };
 
 void TimemoreDot::setup() {
-  // Boot crashed 100% reproducibly with no log line from this component
-  // ever appearing before it -- this line exists to prove, on the next
-  // boot, whether execution reaches this component's setup() at all
-  // before whatever crashes it. If this doesn't print either, the crash
-  // isn't in this component.
-  ESP_LOGI(TAG, "TimemoreDot::setup() entered");
+  // Deliberately does nothing heavy here -- see start_ble_stack_()'s
+  // comment in the header for why. loop() decides when to actually start
+  // the BLE stack, once wifi is confirmed connected rather than just past
+  // its own setup().
+  ESP_LOGI(TAG, "TimemoreDot::setup() entered, deferring BLE start until wifi connects");
+}
+
+void TimemoreDot::start_ble_stack_() {
+  ESP_LOGI(TAG, "Starting BLE stack");
 
   bool ok = NimBLEDevice::init("");
   ESP_LOGI(TAG, "NimBLEDevice::init() returned %s", ok ? "true" : "false");
@@ -160,6 +163,19 @@ void TimemoreDot::on_disconnect() {
 }
 
 void TimemoreDot::loop() {
+  if (!ble_started_) {
+    // wifi::global_wifi_component is always non-null once the wifi
+    // component has been set up (guaranteed here since this component's
+    // own setup_priority is AFTER_WIFI); is_connected() specifically means
+    // actually associated, not just "wifi's own setup() has returned" --
+    // the distinction that matters, see the header comment.
+    if (wifi::global_wifi_component != nullptr && wifi::global_wifi_component->is_connected()) {
+      ble_started_ = true;
+      start_ble_stack_();
+    }
+    return;
+  }
+
   if (marked_for_reconnect_ && !scanning_ && millis() - last_reconnect_attempt_ > RECONNECT_INTERVAL_MS) {
     last_reconnect_attempt_ = millis();
     start_scan_();

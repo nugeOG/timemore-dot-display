@@ -236,6 +236,30 @@ from that log, both fixed (unverified until the next flash):
     already the default in this file, so no manual bump should be needed
     this time, but double-check the local `timemore-dot-display.yaml` on
     your Home Assistant is the current version (re-download if unsure).
+13. **Same test, real result this time (caching wasn't the issue here):
+    coexistence alone does not fix the crash.** Identical fault address,
+    identical crash shape, confirmed against a build with fresh display
+    fixes visibly present in the log (`MADCTL 0x40`, `320 x 240`) — so
+    this wasn't stale code. `TimemoreDot::setup()`'s own diagnostic log
+    line still never showed up, but that evidence is now considered
+    unreliable rather than conclusive: these logs stream over the
+    network (ESPHome API), not a raw serial line, and a crash within
+    milliseconds of a log call can prevent the buffered message from ever
+    being transmitted. The crash backtrace is only reachable through
+    `nimble_port_run`/`host_task`, which only exists if
+    `NimBLEDevice::init()` was actually called — so the balance of
+    evidence still points to the crash being inside NimBLE's own init
+    sequence, just not fixed by coexistence alone.
+14. Implemented the documented fallback: `NimBLEDevice::init()` (and
+    everything after it, now `start_ble_stack_()`) no longer runs from
+    `setup()`. `setup()` does nothing but log. `loop()` polls
+    `wifi::global_wifi_component->is_connected()` — actually associated,
+    not just "wifi's own `setup()` returned" — and calls
+    `start_ble_stack_()` exactly once, on the first `loop()` iteration
+    after that becomes true. Added `wifi` to `DEPENDENCIES` in
+    `__init__.py` since the component now references
+    `wifi::global_wifi_component` directly. **Not yet confirmed on real
+    hardware** — this is the next build to try.
 
 The code for all of the following now exists, and it's now been through a
 real boot (see milestone above) — with `timemore_dot` re-enabled, verify

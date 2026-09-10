@@ -8,7 +8,10 @@ import esphome.config_validation as cv
 from esphome.const import CONF_ID
 
 CODEOWNERS = ["@nuge"]
-DEPENDENCIES = ["esp32"]
+# "wifi" added because timemore_dot.cpp now reads wifi::global_wifi_component
+# directly (to defer BLE start until wifi is actually connected, not just
+# past its own setup() -- see timemore_dot.h's start_ble_stack_() comment).
+DEPENDENCIES = ["esp32", "wifi"]
 CONFLICTS_WITH = ["esp32_ble_tracker", "ble_client"]
 AUTO_LOAD = ["sensor", "binary_sensor", "button"]
 MULTI_CONF = True
@@ -58,13 +61,16 @@ async def to_code(config):
     # (nimble_port_run, called from NimBLEDevice::host_task) with the exact
     # same fault address (EXCVADDR 0xa8) as a known esp-nimble-cpp issue
     # caused by esp_bt_controller_init() failing -- see
-    # https://github.com/h2zero/esp-nimble-cpp/issues/113. This component
-    # starts BLE right after wifi (AFTER_WIFI priority) while wifi is still
-    # actively scanning/connecting on the same radio; nothing in this
-    # config was telling ESP-IDF that wifi and BT need to coexist on that
+    # https://github.com/h2zero/esp-nimble-cpp/issues/113. Nothing in this
+    # config was telling ESP-IDF that wifi and BT need to coexist on the
     # shared radio, since only esp32_ble's own to_code() normally calls
-    # this (and we deliberately don't use esp32_ble). Untested whether this
-    # alone fixes it -- if the same crash recurs, the next thing to try is
-    # delaying NimBLEDevice::init() until wifi has actually finished
-    # connecting, not just finished its own setup().
+    # this (and we deliberately don't use esp32_ble).
+    #
+    # Confirmed by a real rebuild: this alone did NOT fix the crash --
+    # identical fault address, identical crash shape, with this in place.
+    # Left enabled anyway (correct regardless, and cheap); the actual fix
+    # attempt is now in timemore_dot.cpp/.h: NimBLEDevice::init() is
+    # deferred from setup() to the first loop() iteration after wifi
+    # reports actually connected, not just past its own setup() -- see
+    # start_ble_stack_()'s comment in the header.
     request_software_coexistence()
