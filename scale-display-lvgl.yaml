@@ -124,7 +124,7 @@ globals:
   - id: brew_mode_espresso
     type: bool
     restore_value: false
-    initial_value: 'false'
+    initial_value: 'true'
   - id: tare_pending_until
     type: uint32_t
     restore_value: false
@@ -389,7 +389,7 @@ lvgl:
                   y: 95
                   text_font: font_small
                   text_color: 0x7A7A76
-                  text: "Pour-over mode"
+                  text: "Espresso mode"
 
               # ---- button row, bottom (y 176-230, spans full width) ----
               - button:
@@ -486,7 +486,7 @@ lvgl:
                         align: CENTER
                         text_font: font_icons
                         text_color: 0xF2F2EF
-                        text: "\U0000EFEF"
+                        text: "\U0000EB44"
                   on_click:
                     - script.execute: toggle_mode
 
