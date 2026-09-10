@@ -192,6 +192,16 @@ touchscreen:
     swap_xy: true
     mirror_x: true
     mirror_y: true
+  # TEMPORARY: calibration logging hook -- ESPHome's own recommended
+  # calibration procedure is to log raw touch coordinates while tapping
+  # the four corners, then read the observed min/max out of the logs.
+  # There's no interactive calibration tool; this is it. Remove this
+  # on_touch block once real x_min/x_max/y_min/y_max values (above) are
+  # in and confirmed accurate.
+  on_touch:
+    - lambda: |-
+        ESP_LOGI("cal", "x_raw=%d, y_raw=%d, x=%d, y=%d",
+                 touch.x_raw, touch.y_raw, touch.x, touch.y);
 
 # ----------------------------------------------------------------------
 # BLE scale component + entities
