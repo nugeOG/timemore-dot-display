@@ -246,6 +246,12 @@ void TimemoreDot::on_disconnect() {
   rx_buffer_.clear();
   pending_connected_ = false;
   connected_dirty_ = true;
+  // The last weight reading is stale the instant the link drops -- without
+  // this, the display/HA kept showing whatever grams were last seen (e.g.
+  // a full cup) as if it were still live, with no indication it's actually
+  // frozen. Zero it out rather than leaving it alone.
+  pending_weight_ = 0.0f;
+  weight_dirty_ = true;
   mark_for_reconnect_();
 }
 
