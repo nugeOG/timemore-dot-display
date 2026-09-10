@@ -31,6 +31,7 @@
 
 #include <NimBLEDevice.h>
 
+#include <atomic>
 #include <vector>
 #include <string>
 
@@ -147,6 +148,26 @@ class TimemoreDot : public Component {
   sensor::Sensor *weight_sensor_{nullptr};
   sensor::Sensor *battery_sensor_{nullptr};
   binary_sensor::BinarySensor *connected_sensor_{nullptr};
+
+  // publish_state() must only ever be called from loop() (ESPHome's main
+  // task), never directly from on_notify()/on_connect()/on_disconnect(),
+  // which all run on NimBLE's own host task. publish_state() synchronously
+  // runs that sensor's automations, and scale-display-lvgl.yaml updates
+  // LVGL widgets from them -- LVGL is not thread-safe and must only be
+  // touched from the main loop task. Calling it from the host task
+  // silently corrupted something and hung the whole device with no
+  // crash/reboot at all: a real boot's log went completely dead right
+  // after the first burst of notifications, with a single garbled
+  // "[E][lvgl:000]" line (itself tagged as running on the nimble_host
+  // task) as the only symptom, and never logged anything again.
+  // std::atomic since the host task and main loop task can run truly
+  // concurrently on the ESP32's two cores, not just interleaved.
+  std::atomic<bool> weight_dirty_{false};
+  std::atomic<float> pending_weight_{0.0f};
+  std::atomic<bool> battery_dirty_{false};
+  std::atomic<uint8_t> pending_battery_{0};
+  std::atomic<bool> connected_dirty_{false};
+  std::atomic<bool> pending_connected_{false};
 
   // Reassembly buffer -- a single NimBLE notification isn't guaranteed to
   // land as exactly one protocol frame, so we buffer and slice frames out

@@ -235,12 +235,23 @@ void TimemoreDot::on_disconnect() {
   connected_ = false;
   write_char_ = nullptr;
   rx_buffer_.clear();
-  if (connected_sensor_ != nullptr)
-    connected_sensor_->publish_state(false);
+  pending_connected_ = false;
+  connected_dirty_ = true;
   mark_for_reconnect_();
 }
 
 void TimemoreDot::loop() {
+  // Publishing sensor state is the only thing loop() does unconditionally
+  // on every call, ahead of everything else below -- see the members'
+  // comment in the header for why this can't happen directly from
+  // on_notify()/on_disconnect() (NimBLE host task) instead.
+  if (connected_dirty_.exchange(false) && connected_sensor_ != nullptr)
+    connected_sensor_->publish_state(pending_connected_.load());
+  if (weight_dirty_.exchange(false) && weight_sensor_ != nullptr)
+    weight_sensor_->publish_state(pending_weight_.load());
+  if (battery_dirty_.exchange(false) && battery_sensor_ != nullptr)
+    battery_sensor_->publish_state(pending_battery_.load());
+
   if (!ble_started_) {
     // wifi::global_wifi_component is always non-null once the wifi
     // component has been set up (guaranteed here since this component's
@@ -291,8 +302,8 @@ void TimemoreDot::on_notify(const uint8_t *data, size_t length) {
   // least one good frame", not just "BLE link established".
   if (!connected_) {
     connected_ = true;
-    if (connected_sensor_ != nullptr)
-      connected_sensor_->publish_state(true);
+    pending_connected_ = true;
+    connected_dirty_ = true;
   }
 
   rx_buffer_.insert(rx_buffer_.end(), data, data + length);
@@ -329,11 +340,11 @@ void TimemoreDot::handle_frame_(const uint8_t *payload, size_t payload_len, uint
     int32_t raw = (static_cast<int32_t>(payload[0]) << 24) | (static_cast<int32_t>(payload[1]) << 16) |
                   (static_cast<int32_t>(payload[2]) << 8) | static_cast<int32_t>(payload[3]);
     float grams = raw / 10.0f;
-    if (weight_sensor_ != nullptr)
-      weight_sensor_->publish_state(grams);
+    pending_weight_ = grams;
+    weight_dirty_ = true;
   } else if (frame_class == 0x01 && frame_type == 0x05 && payload_len >= 1) {
-    if (battery_sensor_ != nullptr)
-      battery_sensor_->publish_state(payload[0]);
+    pending_battery_ = payload[0];
+    battery_dirty_ = true;
   } else {
     ESP_LOGV(TAG, "Unhandled frame class=0x%02X type=0x%02X len=%u", frame_class, frame_type,
              static_cast<unsigned>(payload_len));
