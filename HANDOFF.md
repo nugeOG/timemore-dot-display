@@ -295,20 +295,71 @@ from that log, both fixed (unverified until the next flash):
     `cg.add_library()` entirely to `esp32.add_idf_component()` (ESPHome's
     API for adding a real ESP-IDF component via git), which was considered
     earlier and set aside for `cg.add_library()`'s simplicity -- given
-    what's now known, that assumption needs revisiting.
+    what's now known, that assumption needs revisiting. *(Superseded — see
+    #17: the `esp32.add_idf_component()` route is no longer the next step.)*
+17. **`CONFIG_NIMBLE_CPP_IDF` confirmed NOT a fix — and the actual root
+    cause found.** A real fresh rebuild + boot log with the build flag in
+    place produced the *identical* crash: same `EXCVADDR` (0x98 on Core 1 /
+    0xa8 on Core 0), same backtrace, across many crash-loop iterations —
+    all reporting the same ELF SHA256 (`c11514df0`), which confirms this
+    was a genuine rebuild of new firmware and not a stale cached binary.
+    The real problem: `h2zero/esp-nimble-cpp` is a **headers-only C++
+    wrapper**. It requires ESP-IDF's actual NimBLE *host stack*
+    (`nimble_port_init`, the host task, its memory pools) to already be
+    compiled into the firmware. This project builds with
+    `framework: type: arduino`, and the Arduino core's prebuilt static libs
+    (`espressif/esp32-arduino-libs`) are built with **Bluedroid only — no
+    NimBLE host at all**. That also explains why *every* sdkconfig-based fix
+    attempted was a no-op: `CONFIG_BT_NIMBLE_ENABLED` via
+    `add_idf_sdkconfig_option` (#13/#14) and the `CONFIG_NIMBLE_CPP_IDF`
+    build flag (#16) both assume a native ESP-IDF build that compiles from
+    sdkconfig; the Arduino framework build doesn't consume `sdkconfig.*` at
+    all, it just links the prebuilt libs. So `NimBLEDevice::init()` was
+    calling into a NimBLE host that was never compiled into the firmware —
+    hence a crash deep inside its own host task.
+    **Fix applied**: `components/timemore_dot/__init__.py` now uses
+    `cg.add_library("h2zero/NimBLE-Arduino", "2.3.6")` instead of
+    `cg.add_library("h2zero/esp-nimble-cpp", "2.5.0")`. NimBLE-Arduino
+    bundles the full mynewt-nimble host source itself and compiles it
+    directly into the sketch, so it does **not** depend on the framework's
+    prebuilt libs having NimBLE support. Same author, same class/method API
+    as esp-nimble-cpp (compatibility already confirmed earlier in this
+    investigation), so no other component code changed. The now-dead
+    `cg.add_build_flag("-D CONFIG_NIMBLE_CPP_IDF=1")` and the no-op
+    `add_idf_sdkconfig_option("CONFIG_BT_NIMBLE_ENABLED", True)` were both
+    removed.
+    *Note on #5*: NimBLE-Arduino was tried once early on and set aside after
+    a build got partway through compiling its own `.cpp` files before
+    failing on a missing `esp_bt.h` — which at the time looked like a
+    fundamental incompatibility and prompted the move to esp-nimble-cpp. In
+    hindsight, since esp-nimble-cpp is now understood to be architecturally
+    wrong for `framework: arduino` regardless, that `esp_bt.h` failure was
+    very likely a transient/fixable include-path issue, not proof that
+    NimBLE-Arduino can't work here.
+    **NOT YET CONFIRMED on real hardware.** The next real build/boot log
+    needs to be checked for (a) whether it now compiles cleanly — if the
+    missing `esp_bt.h` recurs, that needs its own investigation rather than
+    a revert to esp-nimble-cpp — and (b) whether the boot crash is actually
+    resolved.
 
 The code for all of the following now exists, and it's now been through a
 real boot (see milestone above) — with `timemore_dot` re-enabled, verify
 in this order (test the riskiest part first) rather than assuming a
 clean build means it all works:
-1. Bonding — does `secureConnection()` actually succeed on this board's
+1. **Confirm the NimBLE-Arduino swap compiles and fixes the BLE boot
+   crash on real hardware** (see #17). Everything below is blocked on this.
+   ~~Switch from `cg.add_library()` to `esp32.add_idf_component()`~~ —
+   **no longer needed**: that suggestion came from a now-superseded theory
+   about `cg.add_library()` vs ESP-IDF components. The real fix is the
+   NimBLE-Arduino library swap, which stays on `framework: arduino`.
+2. Bonding — does `secureConnection()` actually succeed on this board's
    NimBLE stack at all? Everything downstream depends on this. Watch the
    logs (`logger:` is enabled) for "Bonding/secure connection ... failed".
-2. Frame decode — do the weight/battery entities in Home Assistant show
+3. Frame decode — do the weight/battery entities in Home Assistant show
    sane, updating values once bonded?
-3. Tare — does pressing the on-screen tare button (or the HA `tare_button`
+4. Tare — does pressing the on-screen tare button (or the HA `tare_button`
    entity) actually zero the scale?
-4. Reconnection — pull the scale out of range or power-cycle it; does the
+5. Reconnection — pull the scale out of range or power-cycle it; does the
    scale entity reconnect on its own within a few reconnect-backoff cycles?
 
 ## Screen orientation — corrected to native landscape
@@ -497,8 +548,9 @@ ESPHome config):
 4. **`timemore_dot` external component** — written (`components/timemore_dot/`),
    config-validates and compiles most of the way on a real build (see
    "build status" above) but hasn't successfully linked/flashed yet as of
-   this writing. Uses `h2zero/esp-nimble-cpp`, not NimBLE-Arduino (see
-   above for why).
+   this writing. Now uses `h2zero/NimBLE-Arduino` again (switched back from
+   `h2zero/esp-nimble-cpp` — see build-status #17 for why), unconfirmed on
+   real hardware.
 5. ~~Touchscreen calibration~~ **Resolved**: `calibration:` in
    `timemore-dot-display.yaml` now uses real measured values from tapping
    all four corners (see "Screen orientation" below for the full trail),

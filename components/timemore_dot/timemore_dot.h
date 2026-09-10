@@ -11,14 +11,16 @@
 // (MIT-licensed). That repo is the authoritative source for the protocol --
 // re-check it if anything here seems to not match your actual scale.
 //
-// Built against h2zero/esp-nimble-cpp (see __init__.py's pinned version) --
-// NOT NimBLE-Arduino, which doesn't compile under ESPHome's ESP-IDF-based
-// build even with framework: type: arduino (confirmed by a real build
-// attempt failing on a missing esp_bt.h; see __init__.py's comment for the
-// full story). Class/method names are API-compatible between the two for
-// everything used here, verified against esp-nimble-cpp 2.5.0's source at
-// the time of that switch -- if a future library bump breaks the build,
-// check esp-nimble-cpp's own migration guide, not NimBLE-Arduino's.
+// Built against h2zero/NimBLE-Arduino (see __init__.py's pinned version and
+// its comment for the full story of why -- esp-nimble-cpp was tried first
+// and is architecturally wrong for framework: type: arduino, since it's a
+// headers-only wrapper around a NimBLE host that the Arduino framework's
+// prebuilt libs don't actually contain). Class/method names are API-
+// compatible with esp-nimble-cpp for everything used here (NimBLEDevice,
+// NimBLEClient, NimBLEScan, subscribe(), secureConnection(),
+// NimBLEScanCallbacks::onResult taking a `const` pointer in 2.x) -- if a
+// future library bump breaks the build, check NimBLE-Arduino's own
+// migration guide.
 // ============================================================================
 
 #include "esphome/core/component.h"
