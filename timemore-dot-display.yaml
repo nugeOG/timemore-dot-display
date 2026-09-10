@@ -41,6 +41,12 @@ wifi:
   password: !secret wifi_password
   ap:
     ssid: "${friendly_name} Fallback"
+  # Default wifi modem-sleep power saving duty-cycles the radio in a way
+  # that reliably breaks BLE connection establishment on the ESP32's
+  # single shared 2.4GHz radio -- every real-hardware BLE connect attempt
+  # to the Dot scale timed out (status=13/BLE_HS_ETIMEOUT) at exactly this
+  # config until this was set. See HANDOFF.md's BLE investigation log.
+  power_save_mode: none
 
 captive_portal:
 
