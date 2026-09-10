@@ -261,6 +261,17 @@ void TimemoreDot::loop() {
   // task) rather than in that NimBLE scan callback.
   if (have_pending_connect_) {
     have_pending_connect_ = false;
+
+    // A real boot hit this: the scan callback can queue one more result
+    // (from just before scan->stop() actually took effect) that only gets
+    // processed after a connection has already succeeded -- without this
+    // check, that stale match would tear down a perfectly healthy
+    // connection to "reconnect" to the exact same device.
+    if (client_ != nullptr && client_->isConnected()) {
+      ESP_LOGD(TAG, "Ignoring stale scan match, already connected");
+      return;
+    }
+
     NimBLEDevice::getScan()->stop();
     scanning_ = false;
     connect_(pending_address_);
