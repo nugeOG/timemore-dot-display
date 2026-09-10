@@ -266,6 +266,10 @@ lvgl:
       widgets:
 
         # ---- status row (full width, y 4-30) ----
+        # lbl_time/lbl_date start hidden -- disconnected_view (below) is
+        # what's showing at boot, and its own big clock makes these
+        # redundant. ble_connected's on_state trigger in
+        # timemore-dot-display.yaml un-hides them once actually connected.
         - label:
             id: lbl_time
             x: 8
@@ -273,6 +277,7 @@ lvgl:
             text_font: font_time
             text_color: 0xF2F2EF
             text: "--:--"
+            hidden: true
         - label:
             id: lbl_date
             x: 8
@@ -280,6 +285,7 @@ lvgl:
             text_font: font_small
             text_color: 0x7A7A76
             text: "----"
+            hidden: true
         - label:
             id: lbl_wifi_icon
             x: 206

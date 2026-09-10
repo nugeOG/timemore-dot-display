@@ -283,6 +283,16 @@ binary_sensor:
           - lvgl.obj.update:
               id: connected_view
               hidden: !lambda 'return !x;'
+          # The small status-row clock is only redundant while
+          # disconnected_view's own large clock is showing -- keep it
+          # visible on the normal connected_view, which has no clock of
+          # its own.
+          - lvgl.label.update:
+              id: lbl_time
+              hidden: !lambda 'return !x;'
+          - lvgl.label.update:
+              id: lbl_date
+              hidden: !lambda 'return !x;'
           - lvgl.obj.update:
               id: disconnected_view
               hidden: !lambda 'return x;'
