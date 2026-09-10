@@ -234,6 +234,25 @@ void TimemoreDot::connect_(const NimBLEAddress &address) {
       true, [this](NimBLERemoteCharacteristic *c, uint8_t *data, size_t length, bool is_notify) {
         this->on_notify(data, length);
       });
+
+  // Drives connected_sensor_ (the display's bluetooth icon and the
+  // connected/disconnected view swap) from here -- the same point the
+  // status text flips to "Connected" -- rather than waiting for the first
+  // parsed notification frame like it used to. That split was a real bug
+  // on real hardware: the status text already said "Connected" (set
+  // right after a successful subscribe, same as here) while the icon and
+  // disconnected_view stayed stuck, because on a scale's first-ever
+  // connection after an ESP32 boot notifications were slow enough to
+  // start flowing that on_notify() never got a chance to fire before the
+  // user assumed it was broken (power-cycling the scale then "fixed" it,
+  // consistent with a peripheral-side notification-start delay rather
+  // than anything actually wrong with this component). A successful
+  // subscribe is already a strong signal -- bonded, service/characteristic
+  // discovery done, CCCD write acknowledged -- without depending on when
+  // the scale's first notification happens to land.
+  connected_ = true;
+  pending_connected_ = true;
+  connected_dirty_ = true;
   set_status_(BleStatus::CONNECTED);
 }
 
@@ -317,16 +336,9 @@ void TimemoreDot::loop() {
 }
 
 void TimemoreDot::on_notify(const uint8_t *data, size_t length) {
-  // A secured link is necessary but, per the reference driver's observed
-  // behavior, not by itself proof notifications are flowing -- so
-  // "connected" (for the UI/HA binary_sensor) is defined as "received at
-  // least one good frame", not just "BLE link established".
-  if (!connected_) {
-    connected_ = true;
-    pending_connected_ = true;
-    connected_dirty_ = true;
-  }
-
+  // connected_/connected_sensor_ are set from connect_() now, as soon as
+  // the notify subscription succeeds -- see that function's comment for
+  // why waiting for the first frame here (the previous design) was a bug.
   rx_buffer_.insert(rx_buffer_.end(), data, data + length);
 
   // Frame: A5 5A [class] [type] [len_hi len_lo] [payload...] [crc_hi crc_lo]
