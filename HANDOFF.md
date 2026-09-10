@@ -298,18 +298,19 @@ screen, right-side up, layout matching the design exactly (status row top,
 weight/flow left, timer/mode right, four buttons along the bottom). The
 display side of this investigation is done.
 
-Touch is not yet fully aligned: `swap_xy: true` alone left touches
-**vertically mirrored** (touching near the top registered near the
-bottom) — confirmed by an actual touch test, not a guess. Added
-`mirror_y: true` alongside it. Still unconfirmed:
-- Whether `mirror_x` is also needed (a mirror on one axis doesn't imply
-  anything about the other) — test by tapping each of the four corners
-  and confirming all four register in roughly the right place, not just
-  checking that top/bottom feels right now.
-- The touchscreen `calibration:` block is still the full raw ADC range
-  (0-4095) placeholder — run ESPHome's calibration process once the axes
-  themselves are confirmed correct, since fixing swap/mirror first avoids
-  having to redo calibration if the axis mapping changes again.
+Touch alignment took two real-hardware tests to nail down, both
+confirmed (not guesses): `swap_xy: true` alone left touches **vertically
+mirrored** (top registered as bottom) — fixed with `mirror_y: true`. That
+alone then left touches **horizontally mirrored** too — pressing "start"
+registered as "reset" and "mode" registered as "tare" (an exact left/right
+swap of the four-button row) — fixed with `mirror_x: true`. All three
+transform flags (`swap_xy`, `mirror_x`, `mirror_y`) are now set; this
+should be the complete, correct axis mapping.
+
+Still open: the touchscreen `calibration:` block is still the full raw
+ADC range (0-4095) placeholder — run ESPHome's calibration process now
+that the axis mapping itself is settled, since doing it earlier would
+have risked redoing it if swap/mirror changed again.
 
 ## Auto-timer logic (not scale-dependent — computed entirely on-device)
 

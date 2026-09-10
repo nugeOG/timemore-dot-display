@@ -180,14 +180,17 @@ touchscreen:
   # Raw touch coordinates come from the panel's fixed physical wiring,
   # independent of the display's own orientation (model: ILI9342 above) --
   # swap_xy: true got the axes aligned correctly (confirmed: touch moves
-  # the right way left/right and up/down, not swapped/diagonal), but a
-  # real touch test showed the result was vertically mirrored (touching
-  # near the top registered near the bottom) -- added mirror_y: true to
-  # correct that. Still not confirmed there isn't also a horizontal
-  # mirror needed (mirror_x) -- untested until you can try tapping each
-  # of the four corners and confirm all four land correctly.
+  # the right way left/right and up/down, not swapped/diagonal). Two real
+  # touch tests then found both remaining mirrors needed: vertical
+  # (touching near the top registered near the bottom -- mirror_y) and
+  # horizontal (pressing "start" registered as "reset", "mode" registered
+  # as "tare" -- exactly a left/right swap of the four-button row --
+  # mirror_x). All four corners should now land correctly; recalibrate
+  # (see `calibration:` above) if touch is still imprecise once the axes
+  # themselves are confirmed right.
   transform:
     swap_xy: true
+    mirror_x: true
     mirror_y: true
 
 # ----------------------------------------------------------------------
