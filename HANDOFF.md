@@ -307,10 +307,23 @@ swap of the four-button row) — fixed with `mirror_x: true`. All three
 transform flags (`swap_xy`, `mirror_x`, `mirror_y`) are now set; this
 should be the complete, correct axis mapping.
 
-Still open: the touchscreen `calibration:` block is still the full raw
-ADC range (0-4095) placeholder — run ESPHome's calibration process now
-that the axis mapping itself is settled, since doing it earlier would
-have risked redoing it if swap/mirror changed again.
+**Calibrated.** ESPHome has no interactive calibration tool — its
+documented procedure is to log raw touch coordinates via an `on_touch:`
+lambda while tapping the four corners, then hand-set `calibration:` from
+what's observed. Added that lambda temporarily, had all four corners
+tapped, read the settled (not first-contact-noisy) `x_raw`/`y_raw` values
+off the logs:
+- Bottom-right: x_raw≈187, y_raw≈310
+- Top-right: x_raw≈217, y_raw≈3755
+- Top-left: x_raw≈3781, y_raw≈3792
+- Bottom-left: x_raw≈3797, y_raw≈302
+
+Both corners sharing an edge agreed within ~30 raw units, a reasonable
+sign of consistency. Set `calibration: {x_min: 187, x_max: 3797,
+y_min: 302, y_max: 3792}` and removed the temporary logging hook. This
+closes out the entire display/touch orientation investigation — display
+renders correctly, all four buttons register correctly, and touch is now
+calibrated to real measured values rather than a full-range placeholder.
 
 ## Auto-timer logic (not scale-dependent — computed entirely on-device)
 
@@ -420,11 +433,10 @@ ESPHome config):
    "build status" above) but hasn't successfully linked/flashed yet as of
    this writing. Uses `h2zero/esp-nimble-cpp`, not NimBLE-Arduino (see
    above for why).
-5. **Touchscreen calibration** — the `calibration:` block in
-   `timemore-dot-display.yaml` (x_min/x_max/y_min/y_max) is an
-   uncalibrated placeholder (full raw ADC range). Run the touchscreen
-   through ESPHome's calibration process once it's flashed and paste the
-   real values in.
+5. ~~Touchscreen calibration~~ **Resolved**: `calibration:` in
+   `timemore-dot-display.yaml` now uses real measured values from tapping
+   all four corners (see "Screen orientation" below for the full trail),
+   not the original full-raw-range placeholder.
 6. Repo created: [github.com/nugeOG/timemore-dot-display](https://github.com/nugeOG/timemore-dot-display)
    (private).
 

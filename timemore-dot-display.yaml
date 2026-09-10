@@ -169,14 +169,16 @@ touchscreen:
     mode:
       input: true
   update_interval: 50ms
-  # Run through the touchscreen calibration process and paste the reported
-  # values here before relying on touch accuracy — these are uncalibrated
-  # placeholders.
+  # Measured via the on_touch logging hook (see HANDOFF.md) -- tapped all
+  # four corners, read settled x_raw/y_raw off the "cal" log tag. Both
+  # corners sharing an edge agreed within ~30 raw units of each other, so
+  # this should be reasonably accurate; resistive touchscreens do still
+  # have some inherent nonlinearity per ESPHome's own docs.
   calibration:
-    x_min: 0
-    x_max: 4095
-    y_min: 0
-    y_max: 4095
+    x_min: 187
+    x_max: 3797
+    y_min: 302
+    y_max: 3792
   # Raw touch coordinates come from the panel's fixed physical wiring,
   # independent of the display's own orientation (model: ILI9342 above) --
   # swap_xy: true got the axes aligned correctly (confirmed: touch moves
@@ -185,23 +187,13 @@ touchscreen:
   # (touching near the top registered near the bottom -- mirror_y) and
   # horizontal (pressing "start" registered as "reset", "mode" registered
   # as "tare" -- exactly a left/right swap of the four-button row --
-  # mirror_x). All four corners should now land correctly; recalibrate
-  # (see `calibration:` above) if touch is still imprecise once the axes
-  # themselves are confirmed right.
+  # mirror_x). Confirmed working: all four corners land correctly, and
+  # `calibration:` above now uses real measured values instead of the
+  # full raw-range placeholder.
   transform:
     swap_xy: true
     mirror_x: true
     mirror_y: true
-  # TEMPORARY: calibration logging hook -- ESPHome's own recommended
-  # calibration procedure is to log raw touch coordinates while tapping
-  # the four corners, then read the observed min/max out of the logs.
-  # There's no interactive calibration tool; this is it. Remove this
-  # on_touch block once real x_min/x_max/y_min/y_max values (above) are
-  # in and confirmed accurate.
-  on_touch:
-    - lambda: |-
-        ESP_LOGI("cal", "x_raw=%d, y_raw=%d, x=%d, y=%d",
-                 touch.x_raw, touch.y_raw, touch.x, touch.y);
 
 # ----------------------------------------------------------------------
 # BLE scale component + entities
