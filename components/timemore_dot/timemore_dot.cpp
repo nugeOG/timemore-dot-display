@@ -5,6 +5,23 @@
 #include <esp_bt.h>
 #include <esp_heap_caps.h>
 
+// Root cause of esp_bt_controller_init() failing with ESP_ERR_INVALID_STATE
+// (confirmed via esp-idf v5.5's components/bt/controller/esp32/bt.c: that
+// error is returned immediately, before the controller status is even
+// checked, if the BLE controller's DRAM region was already released) --
+// arduino-esp32's initArduino(), which runs before any ESPHome component
+// code at all, frees that DRAM back to the heap at boot unless a strong
+// definition of bleInUse()/btInUse() overrides its weak default (which
+// just returns false). This project's earlier reliance on calling
+// btStarted() at runtime (see start_ble_stack_()) turned out to be from an
+// older arduino-esp32 core generation's opt-out mechanism and no longer
+// works against the core version this ESP-IDF/ESPHome combination pulls
+// in -- these are the two mechanisms (old and current) it actually checks,
+// as plain strong C symbols so they link regardless of which one a given
+// arduino-esp32 core version actually declares weak.
+extern "C" bool btInUse(void) { return true; }
+extern "C" bool bleInUse(void) { return true; }
+
 namespace esphome {
 namespace timemore_dot {
 
