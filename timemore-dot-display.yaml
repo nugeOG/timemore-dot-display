@@ -135,16 +135,22 @@ display:
     cs_pin: GPIO15
     dc_pin: GPIO2
     color_order: RGB
-    # If the image now fills the whole screen without corruption but
-    # reads upside-down or mirrored, that's a much simpler follow-up:
-    # add a transform: {mirror_x: true} and/or {mirror_y: true} block
-    # here (still untested which, if any, this panel needs).
     # Became a required option (no default) in a newer ESPHome release than
     # this was originally written against. `false` is the common default
     # for this panel, but it's a real per-panel property, not a placeholder
     # -- if colors look inverted/negative once you can see the screen
     # (e.g. the dark background renders light), flip this to `true`.
     invert_colors: false
+    # Physical 180-degree flip (USB port moved to the opposite side): with
+    # no transform: block at all, model: ILI9342's own default rendered
+    # correctly oriented but with mirror_x baked in (confirmed via a real
+    # boot log: "Mirror_x: YES, Mirror_y: NO" with nothing set here at the
+    # time). A 180-degree rotation is both axes flipped from whatever the
+    # current state is, so this inverts each one relative to that default:
+    # mirror_x now false, mirror_y now true.
+    transform:
+      mirror_x: false
+      mirror_y: true
 
 output:
   - platform: ledc
@@ -196,10 +202,18 @@ touchscreen:
   # mirror_x). Confirmed working: all four corners land correctly, and
   # `calibration:` above now uses real measured values instead of the
   # full raw-range placeholder.
+  #
+  # Both mirror_x/mirror_y flipped from their previous true/true to
+  # false/false to match the display's own 180-degree rotation above --
+  # the touch panel's raw wiring didn't change, but which screen corner
+  # each raw corner now corresponds to did. swap_xy is unaffected (a
+  # 180-degree rotation doesn't change which axis is which, only their
+  # direction). Not yet confirmed on real hardware -- verify all four
+  # corners still land correctly after this change and re-tune if not.
   transform:
     swap_xy: true
-    mirror_x: true
-    mirror_y: true
+    mirror_x: false
+    mirror_y: false
 
 # ----------------------------------------------------------------------
 # BLE scale component + entities

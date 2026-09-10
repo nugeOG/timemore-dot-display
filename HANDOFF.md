@@ -463,6 +463,19 @@ closes out the entire display/touch orientation investigation — display
 renders correctly, all four buttons register correctly, and touch is now
 calibrated to real measured values rather than a full-range placeholder.
 
+**Physical 180-degree flip (USB port moved to the other side).** Added an
+explicit `display.transform: {mirror_x: false, mirror_y: true}` — with no
+transform block at all, `model: ILI9342` rendered correctly but with
+`mirror_x` baked in as its own default (confirmed via a real boot log:
+"Mirror_x: YES, Mirror_y: NO" with nothing set here), so a 180-degree spin
+means inverting both axes relative to that default. Touch's
+`transform.mirror_x`/`mirror_y` flipped from `true`/`true` to
+`false`/`false` to match (raw wiring didn't move, but which corner is
+which did); `swap_xy` unaffected, since a 180-degree rotation doesn't
+change which axis is which. **Not yet confirmed on real hardware** — next
+boot needs to verify the physical orientation actually matches and all
+four touch corners still land correctly.
+
 ## Auto-timer logic (not scale-dependent — computed entirely on-device)
 
 Since timer state likely isn't transmitted over BLE at all, the plan is to
