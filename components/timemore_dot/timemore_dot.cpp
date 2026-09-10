@@ -124,7 +124,10 @@ void TimemoreDot::start_scan_() {
   NimBLEScan *scan = NimBLEDevice::getScan();
   scan->setScanCallbacks(scan_callbacks_, false);
   scan->setActiveScan(true);
-  scan->setInterval(100);
+  // interval == window was a 100% BLE scan duty cycle, leaving wifi no gaps
+  // to use the shared radio -- the reference driver uses 500/100 (a 20%
+  // duty cycle) instead, which is friendlier to wifi/BLE coexistence.
+  scan->setInterval(500);
   scan->setWindow(100);
 
   // scan->start() can fail (observed on real hardware: "Unable to scan -
@@ -157,22 +160,35 @@ void TimemoreDot::on_scan_result(const NimBLEAdvertisedDevice *device) {
   if (!device->haveName() || device->getName().rfind(DEVICE_NAME_PREFIX, 0) != 0)
     return;
 
-  ESP_LOGI(TAG, "Found %s (%s), connecting", device->getName().c_str(), device->getAddress().toString().c_str());
-  NimBLEDevice::getScan()->stop();
-  scanning_ = false;
-  connect_(device);
+  ESP_LOGI(TAG, "Found %s (%s), will connect from loop()", device->getName().c_str(),
+           device->getAddress().toString().c_str());
+  pending_address_ = device->getAddress();
+  have_pending_connect_ = true;
 }
 
-void TimemoreDot::connect_(const NimBLEAdvertisedDevice *device) {
-  target_address_ = device->getAddress().toString();
+void TimemoreDot::connect_(const NimBLEAddress &address) {
+  target_address_ = address.toString();
 
-  if (client_ == nullptr) {
-    client_ = NimBLEDevice::createClient();
+  // A fresh client per attempt, not a reused one -- matches the reference
+  // driver and avoids retrying against a client object left in a bad state
+  // by the previous attempt's failure.
+  bool ok = false;
+  for (int attempt = 0; attempt < 3 && !ok; attempt++) {
+    if (client_ != nullptr) {
+      NimBLEDevice::deleteClient(client_);
+      client_ = nullptr;
+    }
+    client_ = NimBLEDevice::createClient(address);
     client_->setClientCallbacks(client_callbacks_, false);
+    ok = client_->connect();
+    if (!ok && attempt < 2) {
+      ESP_LOGW(TAG, "Connect attempt %d to %s failed, retrying", attempt + 1, target_address_.c_str());
+      delay(500);
+    }
   }
 
-  if (!client_->connect(device)) {
-    ESP_LOGW(TAG, "Connect to %s failed, will retry", target_address_.c_str());
+  if (!ok) {
+    ESP_LOGW(TAG, "Connect to %s failed after 3 attempts, will retry later", target_address_.c_str());
     mark_for_reconnect_();
     return;
   }
@@ -235,6 +251,19 @@ void TimemoreDot::loop() {
       ble_started_ = true;
       start_ble_stack_();
     }
+    return;
+  }
+
+  // Checked before the reconnect backoff below: a pending connect target
+  // should be acted on immediately, not made to wait out
+  // RECONNECT_INTERVAL_MS like a plain retry. See on_scan_result()'s
+  // comment for why the connect itself has to happen here (ESPHome's own
+  // task) rather than in that NimBLE scan callback.
+  if (have_pending_connect_) {
+    have_pending_connect_ = false;
+    NimBLEDevice::getScan()->stop();
+    scanning_ = false;
+    connect_(pending_address_);
     return;
   }
 

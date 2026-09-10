@@ -67,6 +67,19 @@ class TimemoreDot : public Component {
 
   // Called from the NimBLE scan/client callbacks defined in the .cpp --
   // public because those callback classes aren't members of TimemoreDot.
+  //
+  // Deliberately does NOT connect (or even stop the scan) itself, even
+  // though it used to. Real hardware testing found every single connect
+  // attempt timing out at NimBLE's ~30s watchdog (status=13/
+  // BLE_HS_ETIMEOUT), which turned out to be self-inflicted: this callback
+  // runs ON NimBLE's own host task, and NimBLEClient::connect() blocks
+  // waiting for a GAP event that the host task itself has to process --
+  // calling it from here blocks the host task waiting on itself, so the
+  // connect-complete event NimBLE queues internally can never be handled
+  // until this callback returns, which only happens once the connect call
+  // gives up. (Matches h2zero/NimBLE-Arduino#1136, not fixed as of 2.3.6.)
+  // This just records the address and a flag; loop() (ESPHome's own task,
+  // not NimBLE's) does the actual stop-scan-and-connect.
   void on_scan_result(const NimBLEAdvertisedDevice *device);
   void on_connect();
   void on_disconnect();
@@ -83,7 +96,15 @@ class TimemoreDot : public Component {
   // just past its own setup(), as the next thing to try -- see HANDOFF.md.
   void start_ble_stack_();
   void start_scan_();
-  void connect_(const NimBLEAdvertisedDevice *device);
+  // Takes an address, not the NimBLEAdvertisedDevice* the scan callback
+  // hands us -- that pointer is only valid for the duration of the
+  // callback, and (see on_scan_result()'s comment) the actual connect
+  // attempt now happens later, from loop(), by which point it may be
+  // dangling. Retries a few times with a fresh client each time, matching
+  // the reference driver -- a single attempt right after scanning stops
+  // was observed on real hardware to sometimes need a retry or two before
+  // the scale accepts the connection.
+  void connect_(const NimBLEAddress &address);
   // Sets marked_for_reconnect_ and stamps last_reconnect_attempt_ to now --
   // every failure path needs both, not just the flag, so loop()'s backoff
   // check actually waits RECONNECT_INTERVAL_MS before retrying instead of
@@ -116,6 +137,12 @@ class TimemoreDot : public Component {
   bool marked_for_reconnect_{false};
   uint32_t last_reconnect_attempt_{0};
   std::string target_address_;
+
+  // Set by on_scan_result() (NimBLE host task), consumed by loop()
+  // (ESPHome's own task) -- see on_scan_result()'s comment for why the
+  // connect attempt itself can't happen on the host task.
+  bool have_pending_connect_{false};
+  NimBLEAddress pending_address_;
 
   sensor::Sensor *weight_sensor_{nullptr};
   sensor::Sensor *battery_sensor_{nullptr};
