@@ -258,8 +258,44 @@ from that log, both fixed (unverified until the next flash):
     `start_ble_stack_()` exactly once, on the first `loop()` iteration
     after that becomes true. Added `wifi` to `DEPENDENCIES` in
     `__init__.py` since the component now references
-    `wifi::global_wifi_component` directly. **Not yet confirmed on real
-    hardware** — this is the next build to try.
+    `wifi::global_wifi_component` directly.
+15. **Real test result: timing/coexistence conclusively ruled out.** The
+    boot log showed the device reach `[I][wifi:1609]: Connected` (fully
+    associated, IP assigned, not just "setup() returned") and THEN
+    `"Starting BLE stack"` logged successfully — and the identical crash
+    (same `EXCVADDR` 0x98/0xa8, same crash shape) still happened
+    immediately after. This settles it: the crash isn't a wifi-radio-
+    timing race at all. It's a deterministic failure specifically tied to
+    calling into NimBLE's init path on this exact board/library/ESP-IDF
+    combination, regardless of when that call happens.
+16. Since the failure is deterministic and library-specific, searched
+    GitHub for anything matching this exact library/build combination
+    rather than guessing further. Found
+    [h2zero/esp-nimble-cpp#407](https://github.com/h2zero/esp-nimble-cpp/issues/407):
+    the library's own maintainer explains PlatformIO "does not read the
+    kconfig from components," so a Kconfig value like our
+    `CONFIG_BT_NIMBLE_ENABLED=y` may never actually reach esp-nimble-cpp's
+    own header-selection logic as a real C++ preprocessor define — fixed
+    there by adding `-D CONFIG_NIMBLE_CPP_IDF=1` as an explicit build
+    flag. More significantly,
+    [h2zero/esp-nimble-cpp#377](https://github.com/h2zero/esp-nimble-cpp/issues/377)
+    reveals `cg.add_library()` (PlatformIO's `lib_deps` mechanism, what
+    `components/timemore_dot/__init__.py` has used all along) isn't
+    really a supported way to pull in esp-nimble-cpp at all — it's
+    fundamentally an ESP-IDF component (needs `idf_component.yml`), and a
+    maintainer states outright "You can not add an espidf component via
+    `lib_deps`." It can appear to work under `framework: arduino` by
+    coincidentally linking against Arduino core's own bundled NimBLE
+    binary instead of what the headers were actually compiled against —
+    exactly the kind of silent ABI mismatch that would compile clean and
+    crash deep at runtime with no warning, matching our symptom exactly.
+    Added the `-D CONFIG_NIMBLE_CPP_IDF=1` build flag as the next thing to
+    try — **not yet confirmed on real hardware.** If this doesn't resolve
+    it, the properly-supported next step is switching away from
+    `cg.add_library()` entirely to `esp32.add_idf_component()` (ESPHome's
+    API for adding a real ESP-IDF component via git), which was considered
+    earlier and set aside for `cg.add_library()`'s simplicity -- given
+    what's now known, that assumption needs revisiting.
 
 The code for all of the following now exists, and it's now been through a
 real boot (see milestone above) — with `timemore_dot` re-enabled, verify

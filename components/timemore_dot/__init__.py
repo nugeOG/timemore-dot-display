@@ -47,6 +47,30 @@ async def to_code(config):
     # in timemore_dot.h/.cpp.
     cg.add_library("h2zero/esp-nimble-cpp", "2.5.0")
 
+    # Found via a GitHub search once the wifi-timing theory was ruled out
+    # (a real test with wifi already fully connected still crashed
+    # identically): esp-nimble-cpp is fundamentally an ESP-IDF component,
+    # not a PlatformIO/Arduino library -- see
+    # https://github.com/h2zero/esp-nimble-cpp/issues/407, where the
+    # library's own maintainer explains "platformio does not read the
+    # kconfig from components [so] there is a mandatory config macro
+    # required for the right headers to be included", fixed by adding
+    # `-D CONFIG_NIMBLE_CPP_IDF=1` to the build flags. Our build doesn't
+    # hit that issue's exact symptom (a missing-header compile error --
+    # ours compiles fine), but per
+    # https://github.com/h2zero/esp-nimble-cpp/issues/377,
+    # cg.add_library() (PlatformIO's lib_deps mechanism, used above) is
+    # not really a supported way to pull in an ESP-IDF-native component at
+    # all -- it can appear to work under framework: arduino by
+    # coincidentally linking against the Arduino core's own bundled NimBLE
+    # binary instead of the headers actually being compiled against,
+    # which is exactly the kind of silent mismatch that could produce a
+    # deep, hard-to-diagnose runtime crash without any compile-time
+    # warning. Adding this flag explicitly, in case the missing Kconfig
+    # propagation described in #407 is contributing even without the
+    # missing-header symptom.
+    cg.add_build_flag("-D CONFIG_NIMBLE_CPP_IDF=1")
+
     # Nothing else in this config requests Bluetooth (deliberately -- no
     # esp32_ble_tracker/ble_client, see HANDOFF.md's architecture-decision
     # section) so nothing else will enable it in sdkconfig either.
@@ -68,9 +92,12 @@ async def to_code(config):
     #
     # Confirmed by a real rebuild: this alone did NOT fix the crash --
     # identical fault address, identical crash shape, with this in place.
-    # Left enabled anyway (correct regardless, and cheap); the actual fix
-    # attempt is now in timemore_dot.cpp/.h: NimBLEDevice::init() is
-    # deferred from setup() to the first loop() iteration after wifi
-    # reports actually connected, not just past its own setup() -- see
-    # start_ble_stack_()'s comment in the header.
+    # Left enabled anyway (correct regardless, and cheap). timemore_dot.cpp
+    # also defers NimBLEDevice::init() from setup() to the first loop()
+    # iteration after wifi reports actually connected (see
+    # start_ble_stack_()'s comment in the header) -- also confirmed NOT
+    # the fix by a real test: wifi was fully connected (not just past its
+    # own setup()) and the identical crash still happened immediately.
+    # That rules out timing/coexistence as the cause entirely; see the
+    # add_build_flag() call above for the current hypothesis.
     request_software_coexistence()
