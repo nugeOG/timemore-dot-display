@@ -115,10 +115,16 @@ class TimemoreDot : public Component {
   // hands us -- that pointer is only valid for the duration of the
   // callback, and (see on_scan_result()'s comment) the actual connect
   // attempt now happens later, from loop(), by which point it may be
-  // dangling. Retries a few times with a fresh client each time, matching
-  // the reference driver -- a single attempt right after scanning stops
-  // was observed on real hardware to sometimes need a retry or two before
-  // the scale accepts the connection.
+  // dangling. One attempt only, with a fresh client -- previously retried
+  // inline up to 3 times with a blocking delay(500) between each, but
+  // every step here (connect, secureConnection, service/characteristic
+  // discovery) already blocks the whole main loop task for a second or
+  // more on its own, and real hardware showed that compounding delay
+  // (3.5-3.8s "took a long time" warnings) starving LVGL's render tick
+  // badly enough that the display missed a redraw after connecting. A
+  // failure here already flows back into the normal start_scan_()-then-
+  // connect_() cycle via mark_for_reconnect_()'s 5s backoff, so nothing
+  // is lost by not retrying inline.
   void connect_(const NimBLEAddress &address);
   // Sets marked_for_reconnect_ and stamps last_reconnect_attempt_ to now --
   // every failure path needs both, not just the flag, so loop()'s backoff

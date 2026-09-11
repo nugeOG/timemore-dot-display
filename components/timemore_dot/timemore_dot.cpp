@@ -177,26 +177,36 @@ void TimemoreDot::connect_(const NimBLEAddress &address) {
   target_address_ = address.toString();
   set_status_(BleStatus::CONNECTING);
 
-  // A fresh client per attempt, not a reused one -- matches the reference
-  // driver and avoids retrying against a client object left in a bad state
-  // by the previous attempt's failure.
-  bool ok = false;
-  for (int attempt = 0; attempt < 3 && !ok; attempt++) {
-    if (client_ != nullptr) {
-      NimBLEDevice::deleteClient(client_);
-      client_ = nullptr;
-    }
-    client_ = NimBLEDevice::createClient(address);
-    client_->setClientCallbacks(client_callbacks_, false);
-    ok = client_->connect();
-    if (!ok && attempt < 2) {
-      ESP_LOGW(TAG, "Connect attempt %d to %s failed, retrying", attempt + 1, target_address_.c_str());
-      delay(500);
-    }
+  // A fresh client, not a reused one -- matches the reference driver and
+  // avoids retrying against a client object left in a bad state by a
+  // previous failure.
+  //
+  // Only ONE attempt here, not several in an inline retry loop like this
+  // used to do (3 attempts with a blocking delay(500) between each). Every
+  // call in this chain -- connect(), secureConnection(), service/
+  // characteristic discovery below -- is itself a blocking NimBLE call
+  // that can legitimately take a second or more (bonding especially, on a
+  // scale's first-ever pairing with this ESP32). connect_() runs on
+  // loop(), ESPHome's main task, which also drives LVGL's render tick --
+  // real hardware showed a ~3.5-3.8s "took a long time" warning on every
+  // connection attempt, and on one real boot the display's "not
+  // connected" screen failed to visually clear despite every sensor/
+  // binary_sensor state publishing correctly (confirmed via the HA log),
+  // strongly suggesting LVGL missed a redraw during that stall.
+  // Tripling the worst case via 3 inline attempts made that materially
+  // worse for no real benefit -- mark_for_reconnect_() below already
+  // feeds back into the exact same start_scan_()-then-connect_() cycle on
+  // the normal 5s backoff if this single attempt fails, with no need to
+  // duplicate that retry logic inline here.
+  if (client_ != nullptr) {
+    NimBLEDevice::deleteClient(client_);
+    client_ = nullptr;
   }
+  client_ = NimBLEDevice::createClient(address);
+  client_->setClientCallbacks(client_callbacks_, false);
 
-  if (!ok) {
-    ESP_LOGW(TAG, "Connect to %s failed after 3 attempts, will retry later", target_address_.c_str());
+  if (!client_->connect()) {
+    ESP_LOGW(TAG, "Connect to %s failed, will retry", target_address_.c_str());
     mark_for_reconnect_();
     return;
   }
