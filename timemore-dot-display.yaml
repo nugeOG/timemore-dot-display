@@ -214,6 +214,12 @@ touchscreen:
     swap_xy: true
     mirror_x: false
     mirror_y: false
+  # Any raw touch counts as activity for the disconnected-screen dim timer
+  # (see scale-display-lvgl.yaml's wake_screen script + 1s interval) --
+  # fires for every touch regardless of which widget (if any) it hit, not
+  # just widget on_click handlers.
+  on_touch:
+    - script.execute: wake_screen
 
 # ----------------------------------------------------------------------
 # BLE scale component + entities
@@ -287,6 +293,10 @@ binary_sensor:
       id: ble_connected
       on_state:
         then:
+          # Any connect or disconnect counts as activity for the
+          # disconnected-screen dim timer -- see scale-display-lvgl.yaml's
+          # wake_screen script.
+          - script.execute: wake_screen
           - lvgl.label.update:
               id: lbl_bt_icon
               text: !lambda 'return std::string(x ? "\U0000E1A8" : "\U0000E1A9");'

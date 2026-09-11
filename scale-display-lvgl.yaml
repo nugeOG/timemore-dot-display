@@ -133,6 +133,20 @@ globals:
     type: bool
     restore_value: false
     initial_value: 'false'
+  # Screen-dim-when-idle (disconnected screen only -- see the 1s interval
+  # below and wake_screen script). last_activity_ms is stamped by any
+  # touch (touchscreen.on_touch in timemore-dot-display.yaml) or any BLE
+  # connection state change (ble_connected's on_state, same file), not
+  # just by widget clicks -- a raw touch that misses every button still
+  # counts as activity.
+  - id: last_activity_ms
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+  - id: screen_dimmed
+    type: bool
+    restore_value: false
+    initial_value: 'false'
 
 # ----------------------------------------------------------------------------
 # Timer tick + reset-hold ring animation
@@ -151,6 +165,22 @@ interval:
                   char buf[8];
                   snprintf(buf, sizeof(buf), "%02d:%02d", id(timer_seconds) / 60, id(timer_seconds) % 60);
                   return std::string(buf);
+      # Dim the backlight after 5 minutes with no touch and no BLE
+      # connection -- only while actually disconnected (the scale being
+      # mid-pour with the display untouched for a few minutes shouldn't
+      # dim on you). Undimming happens in wake_screen, called from any
+      # touch or BLE connection-state change, not from here.
+      - if:
+          condition:
+            lambda: |-
+              return !id(screen_dimmed) && !id(ble_connected).state &&
+                     (millis() - id(last_activity_ms) > 5UL * 60UL * 1000UL);
+          then:
+            - light.turn_on:
+                id: backlight
+                brightness: 15%
+                transition_length: 2s
+            - lambda: 'id(screen_dimmed) = true;'
 
   - interval: 30ms
     then:
@@ -191,6 +221,19 @@ interval:
 # Actions
 # ----------------------------------------------------------------------------
 script:
+  - id: wake_screen
+    then:
+      - lambda: 'id(last_activity_ms) = millis();'
+      - if:
+          condition:
+            lambda: 'return id(screen_dimmed);'
+          then:
+            - light.turn_on:
+                id: backlight
+                brightness: 100%
+                transition_length: 0s
+            - lambda: 'id(screen_dimmed) = false;'
+
   - id: do_tare
     then:
       - button.press: tare_button
