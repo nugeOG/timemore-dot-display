@@ -320,6 +320,24 @@ binary_sensor:
           - lvgl.obj.update:
               id: disconnected_view
               hidden: !lambda 'return x;'
+          # Belt-and-braces against a real, confirmed ESPHome/LVGL race:
+          # LVGL is built with no OS locking (LV_USE_OS = NONE), and if an
+          # lv_obj_invalidate() call from this automation happens to land
+          # on a different task while the main task is mid-refresh inside
+          # lv_timer_handler(), LVGL's own end-of-refresh cleanup
+          # (lv_refr.c) silently WIPES that invalidate -- the widget's
+          # actual state (hidden flags, text) is still correctly set, but
+          # the pixels never get repainted until something else
+          # invalidates that area again. This matched a real hardware bug
+          # exactly: the "disconnected" screen sometimes failed to
+          # visually clear on a scale's first-ever connection after boot
+          # (right as a burst of rapid weight-notification updates
+          # competed with this same automation), while every entity state
+          # was already confirmed correct via the log. A plain
+          # lv_obj_invalidate() issued here, after the flurry above, is
+          # what actually sticks and gets picked up by the next render
+          # tick, regardless of whether an earlier one was lost.
+          - lambda: 'lv_obj_invalidate(lv_scr_act());'
 
 text_sensor:
   - platform: timemore_dot
