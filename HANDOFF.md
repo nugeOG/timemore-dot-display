@@ -593,6 +593,24 @@ ESPHome config):
    not the original full-raw-range placeholder.
 6. Repo created: [github.com/nugeOG/timemore-dot-display](https://github.com/nugeOG/timemore-dot-display)
    (private).
+7. ~~Display stuck on disconnected screen despite a healthy BLE
+   connection~~ **Resolved**. `connected_`/`connected_sensor_` only
+   flipped true once `on_notify()` saw a first parsed weight/battery
+   frame -- but an idle scale sitting at 0.0g with no weight perturbation
+   emits no notifications on its own, so that could go on indefinitely.
+   Confirmed on real hardware: the scale's own LED went solid white
+   (its own "connected" indicator) while the display's `disconnected_view`
+   never cleared. Power-cycling the scale "fixed" it only because
+   pressing the physical power button perturbs the load cell enough to
+   trigger a frame. Fixed in `connect_()`: the connected state is now set
+   right after the notify subscription succeeds (also now checking
+   `subscribe()`'s return value, previously ignored), and a handshake/poll
+   frame is sent immediately after connecting so an idle scale reports
+   its state right away rather than waiting for its own next periodic
+   frame. (An earlier, incorrect theory blamed an ESPHome/LVGL redraw
+   race and added a raw `lv_obj_invalidate()` call to force a redraw --
+   that didn't fix the bug and caused a real regression, an apparent
+   crash/reboot; it was reverted.)
 
 ## Files included in this handoff
 
