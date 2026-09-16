@@ -240,11 +240,41 @@ void TimemoreDot::connect_(const NimBLEAddress &address) {
     return;
   }
 
-  notify_char->subscribe(
+  // subscribe()'s return value matters: if the CCCD write fails, the BLE
+  // link stays up but no notifications will ever arrive, and nothing else
+  // here would have noticed -- the component would sit "connected" at the
+  // link level forever with no data and no retry.
+  bool subscribed = notify_char->subscribe(
       true, [this](NimBLERemoteCharacteristic *c, uint8_t *data, size_t length, bool is_notify) {
         this->on_notify(data, length);
       });
+  if (!subscribed) {
+    ESP_LOGE(TAG, "Failed to subscribe to notifications on %s", target_address_.c_str());
+    client_->disconnect();
+    mark_for_reconnect_();
+    return;
+  }
+
+  // Connection is established once bonding, service/characteristic
+  // discovery, and the CCCD subscription above all succeed -- this no
+  // longer waits for on_notify() to see a first frame (see that
+  // function's comment for why: an idle scale sitting at 0.0g with no
+  // weight perturbation emits no notifications at all on its own, which
+  // left connected_/connected_sensor_ stuck false -- and with it,
+  // disconnected_view -- indefinitely despite a perfectly healthy link).
+  connected_ = true;
+  pending_connected_ = true;
+  connected_dirty_ = true;
   set_status_(BleStatus::CONNECTED);
+
+  // Prompt the scale for its current state immediately rather than
+  // waiting for it to volunteer one -- the same handshake/poll frame
+  // tare() sends as its second write (see HANDOFF.md, "BLE protocol"
+  // section). Without this, an idle scale that isn't actively being
+  // weighed on may not send anything until its next periodic frame
+  // (battery reports roughly every 30s per the reference driver), even
+  // though connected_ above is already correctly true.
+  write_frame_(TARE_FOLLOWUP_FRAME, sizeof(TARE_FOLLOWUP_FRAME));
 }
 
 void TimemoreDot::on_connect() { ESP_LOGI(TAG, "Connected to %s", target_address_.c_str()); }
@@ -327,10 +357,12 @@ void TimemoreDot::loop() {
 }
 
 void TimemoreDot::on_notify(const uint8_t *data, size_t length) {
-  // A secured link is necessary but, per the reference driver's observed
-  // behavior, not by itself proof notifications are flowing -- so
-  // "connected" (for the UI/HA binary_sensor) is defined as "received at
-  // least one good frame", not just "BLE link established".
+  // connected_/connected_sensor_ are normally already set by connect_()
+  // once subscribe() succeeds (see that function's comment for why
+  // waiting for a first frame here doesn't work: an idle scale can go
+  // indefinitely without sending one). This is just belt-and-braces in
+  // case a frame arrives before loop() has drained connected_dirty_ --
+  // harmless no-op once connected_ is already true.
   if (!connected_) {
     connected_ = true;
     pending_connected_ = true;

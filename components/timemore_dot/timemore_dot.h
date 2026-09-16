@@ -118,13 +118,21 @@ class TimemoreDot : public Component {
   // dangling. One attempt only, with a fresh client -- previously retried
   // inline up to 3 times with a blocking delay(500) between each, but
   // every step here (connect, secureConnection, service/characteristic
-  // discovery) already blocks the whole main loop task for a second or
-  // more on its own, and real hardware showed that compounding delay
-  // (3.5-3.8s "took a long time" warnings) starving LVGL's render tick
-  // badly enough that the display missed a redraw after connecting. A
-  // failure here already flows back into the normal start_scan_()-then-
-  // connect_() cycle via mark_for_reconnect_()'s 5s backoff, so nothing
-  // is lost by not retrying inline.
+  // discovery, CCCD subscription) already blocks the whole main loop task
+  // for a second or more on its own, and real hardware showed that
+  // compounding delay (3.5-3.8s "took a long time" warnings) starving
+  // LVGL's render tick. A failure here already flows back into the normal
+  // start_scan_()-then-connect_() cycle via mark_for_reconnect_()'s 5s
+  // backoff, so nothing is lost by not retrying inline.
+  //
+  // connected_/connected_sensor_ are set true here, once subscribe()
+  // succeeds -- not by on_notify() seeing a first frame, which is what
+  // this used to wait for. An idle scale sitting at 0.0g with no weight
+  // perturbation can go indefinitely without sending any notification at
+  // all, which left the display's disconnected_view stuck showing despite
+  // a fully healthy, bonded, subscribed BLE link -- confirmed on real
+  // hardware (the scale's own LED went solid white, indicating it
+  // considered itself connected, while the display never updated).
   void connect_(const NimBLEAddress &address);
   // Sets marked_for_reconnect_ and stamps last_reconnect_attempt_ to now --
   // every failure path needs both, not just the flag, so loop()'s backoff
